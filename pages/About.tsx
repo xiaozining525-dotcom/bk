@@ -62,7 +62,7 @@ export const About: React.FC = () => {
         </ul>
         <h3>联系方式</h3>
         <p>
-            Email: <a href="mailto:qqdzz789@gmail.com" className="text-blue-600 hover:underline dark:text-blue-400">example@email.com</a>
+            Email: <a href="mailto:qqdzz789@gmail.com" className="text-blue-600 hover:underline dark:text-blue-400">qqdzz789@gmail.com</a>
         </p>
       </div>
     </div>
