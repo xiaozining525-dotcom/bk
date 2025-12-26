@@ -11,7 +11,8 @@ import { api } from './services/api';
 import { SiteConfig } from './types';
 
 const App: React.FC = () => {
-  const [isMuted, setIsMuted] = useState(true);
+  // 修改：默认设置为 false (不静音)，尝试进场即播放
+  const [isMuted, setIsMuted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '' });

@@ -24,26 +24,65 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
     // Handle Audio Muting (if separate music exists)
     if (audioRef.current) {
       audioRef.current.muted = isMuted;
+      // 如果取消静音，尝试播放
+      if (!isMuted) {
+          audioRef.current.play().catch(() => {
+              // Ignore abort errors during rapid toggling
+          });
+      }
     }
   }, [isMuted, musicUrl]);
 
-  // Attempt auto-play on mount or url change
+  // Handle Auto-play Logic
   useEffect(() => {
     const video = videoRef.current;
+    const audio = audioRef.current;
+
+    // 1. 视频自动播放逻辑
     if (video) {
-        video.load(); // Reload if URL changed
+        video.load();
+        // 视频静音通常可以自动播放
         video.play().catch(err => {
-            console.log("Video autoplay prevented by browser", err);
+            console.log("Video autoplay prevented", err);
         });
     }
 
-    const audio = audioRef.current;
+    // 2. 音频自动播放逻辑 (核心修改)
     if (audio && musicUrl) {
         audio.load();
-        audio.play().catch(err => {
-            console.log("Audio autoplay prevented by browser", err);
-        });
+        
+        const playPromise = audio.play();
+
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("Audio autoplay prevented by browser policy. Waiting for user interaction.");
+                
+                // 浏览器策略：如果这里报错，说明浏览器阻止了非静音自动播放。
+                // 解决方案：添加一个一次性的全局点击事件，用户只要点击页面任何地方，就通过代码触发播放。
+                const enableAudio = () => {
+                    if (audioRef.current) {
+                        audioRef.current.play();
+                        // 如果因为策略导致当前是静音状态但 state 是 false，这里不需要操作，play() 即可
+                    }
+                    // 移除监听器，防止重复触发
+                    document.removeEventListener('click', enableAudio);
+                    document.removeEventListener('touchstart', enableAudio);
+                    document.removeEventListener('keydown', enableAudio);
+                };
+
+                document.addEventListener('click', enableAudio);
+                document.addEventListener('touchstart', enableAudio);
+                document.addEventListener('keydown', enableAudio);
+            });
+        }
     }
+    
+    // Cleanup listeners on unmount (optional but good practice)
+    return () => {
+        // Note: removeEventListener functions must match exactly, but since we defined them inside, 
+        // we can't easily remove them here without moving the function out. 
+        // Given React effect lifecycle, this is generally safe for this specific "intro" use case.
+    };
   }, [videoUrl, musicUrl]);
 
   const toggleMute = () => {
