@@ -11,19 +11,47 @@ import { api } from './services/api';
 import { SiteConfig } from './types';
 
 const App: React.FC = () => {
-  // 修改：默认设置为 false (不静音)，尝试进场即播放
+  // 1. Theme Management
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Initialize Theme from localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
+    }
+  }, []);
+
+  // Apply Theme to HTML element
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  // 2. Audio/Auth/Config State
   const [isMuted, setIsMuted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '' });
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '', avatarUrl: '' });
 
   useEffect(() => {
-    // 1. Check local storage for basic session persistence
+    // Check local storage for basic session persistence
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
     setIsAuthenticated(!!token);
     setIsLoadingAuth(false);
 
-    // 2. Fetch remote config (background video/music)
+    // Fetch remote config (background video/music/avatar)
     const loadConfig = async () => {
         const config = await api.getConfig();
         setSiteConfig(config);
@@ -48,6 +76,8 @@ const App: React.FC = () => {
             isAuthenticated={isAuthenticated}
             onLogout={handleLogout}
             siteConfig={siteConfig}
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
         }>
           <Route index element={<Home />} />
@@ -65,8 +95,8 @@ const App: React.FC = () => {
           {/* 404 Route */}
           <Route path="*" element={
             <div className="flex flex-col items-center justify-center py-20 bg-glass rounded-3xl border border-glassBorder mx-auto max-w-md mt-10 text-center p-8">
-              <h1 className="text-4xl font-bold text-slate-800 mb-2">404</h1>
-              <p className="text-slate-600 mb-6">页面走丢了</p>
+              <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-2">404</h1>
+              <p className="text-slate-600 dark:text-slate-300 mb-6">页面走丢了</p>
               <a href="#/" className="px-6 py-2 bg-slate-800 text-white rounded-full">返回首页</a>
             </div>
           } />

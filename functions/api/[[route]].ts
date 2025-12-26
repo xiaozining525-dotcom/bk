@@ -6,13 +6,10 @@
  * 3. POST /api/posts - Create/Update post (Auth required)
  * 4. DELETE /api/posts?id=xyz - Delete post (Auth required)
  * 5. POST /api/auth - Login check
- * 6. GET /api/config - Get public site configuration (video/music urls)
+ * 6. GET /api/config - Get public site configuration (video/music/avatar urls)
  */
 
 // --- Type Definitions for Cloudflare Environment ---
-// These are normally provided by @cloudflare/workers-types but defined here to satisfy the compiler
-// if the environment is not strictly configured.
-
 interface KVNamespace {
   get(key: string, options?: { type?: "text" | "json" | "arrayBuffer" | "stream"; cacheTtl?: number }): Promise<any>;
   get(key: string, type: "text"): Promise<string | null>;
@@ -46,6 +43,7 @@ interface Env {
   ADMIN_PASSWORD?: string; // Set in Cloudflare Settings -> Environment Variables
   BACKGROUND_VIDEO_URL?: string; // Set in Cloudflare Settings
   BACKGROUND_MUSIC_URL?: string; // Set in Cloudflare Settings
+  AVATAR_URL?: string; // Set in Cloudflare Settings (New)
 }
 
 interface PostMetadata {
@@ -67,8 +65,9 @@ const CORS_HEADERS = {
 
 const METADATA_KEY = 'metadata:posts';
 
-// Default fallback video if env var is not set
+// Default fallback assets
 const DEFAULT_VIDEO = "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4";
+const DEFAULT_AVATAR = "https://picsum.photos/300/300";
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -98,19 +97,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const isAuthenticated = (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
-    // In a real app, use JWT or proper hashing. 
-    // Here we compare directly with the env var for simplicity as requested.
     const validPass = env.ADMIN_PASSWORD || 'admin123'; 
     return token === validPass;
   };
 
   // --- Routes ---
 
-  // 1. Config (Public) - New route to expose env vars safely
+  // 1. Config (Public) - Expose env vars
   if (path === 'config') {
     return jsonResponse({
       videoUrl: env.BACKGROUND_VIDEO_URL || DEFAULT_VIDEO,
-      musicUrl: env.BACKGROUND_MUSIC_URL || ""
+      musicUrl: env.BACKGROUND_MUSIC_URL || "",
+      avatarUrl: env.AVATAR_URL || DEFAULT_AVATAR
     });
   }
 
@@ -119,7 +117,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const body: { password?: string } = await request.json();
     const validPass = env.ADMIN_PASSWORD || 'admin123';
     if (body.password === validPass) {
-      return jsonResponse({ token: body.password }); // Returning password as token (Simulated)
+      return jsonResponse({ token: body.password });
     }
     return errorResponse('Invalid password', 401);
   }
@@ -136,14 +134,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const postData = await env.BLOG_KV.get(`post:${id}`, 'json');
         if (!postData) return errorResponse('Post not found', 404);
         
-        // Increment view count (fire and forget update)
-        // Note: For strict concurrency, this isn't atomic, but fine for a blog.
+        // Increment view count
         const metaList = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
         const idx = metaList.findIndex(p => p.id === id);
         if (idx !== -1) {
              metaList[idx].views = (metaList[idx].views || 0) + 1;
              await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(metaList));
-             // Also update the full post object view count
+             
              const fullPost: any = postData;
              fullPost.views = metaList[idx].views;
              await env.BLOG_KV.put(`post:${id}`, JSON.stringify(fullPost));
@@ -152,7 +149,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return jsonResponse(postData);
 
       } else {
-        // List all posts (metadata only)
+        // List all posts
         const list = (await env.BLOG_KV.get(METADATA_KEY, 'json')) || [];
         return jsonResponse(list);
       }
@@ -165,10 +162,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const body: any = await request.json();
       if (!body.id || !body.title) return errorResponse('Missing fields');
 
-      // 1. Save Full Content
+      // Save Full Content
       await env.BLOG_KV.put(`post:${body.id}`, JSON.stringify(body));
 
-      // 2. Update Metadata List
+      // Update Metadata List
       let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
       const metaIndex = list.findIndex(p => p.id === body.id);
       
@@ -200,10 +197,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const id = url.searchParams.get('id');
       if (!id) return errorResponse('Missing ID');
 
-      // 1. Delete Content
+      // Delete Content
       await env.BLOG_KV.delete(`post:${id}`);
 
-      // 2. Update Metadata List
+      // Update Metadata List
       let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
       list = list.filter(p => p.id !== id);
       await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(list));

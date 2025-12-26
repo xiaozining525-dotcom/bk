@@ -21,7 +21,8 @@ export const api = {
         // Fallback for dev/error
         return { 
             videoUrl: "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4", 
-            musicUrl: "" 
+            musicUrl: "",
+            avatarUrl: "https://picsum.photos/300/300"
         };
     }
   },

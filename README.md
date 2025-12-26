@@ -5,7 +5,7 @@
 ## 特性
 - **UI风格**: 磨砂玻璃 (Glassmorphism)，全屏动态视频背景，极致响应式。
 - **核心功能**: 博客 CRUD，Markdown 渲染，分类/标签筛选，阅读量统计。
-- **配置化**: 背景视频、音乐、管理员密码均通过环境变量配置。
+- **配置化**: 背景视频、音乐、头像、管理员密码均通过环境变量配置。
 - **架构**: 无服务器 (Serverless)，无外部数据库 (NoSQL KV)。
 
 ## 部署步骤 (完全免费)
@@ -33,9 +33,10 @@
 5. **Environment variables (环境变量)**:
    - 必须配置:
      - `ADMIN_PASSWORD`: 你的管理员登录密码 (例如 `MySecretPass`)
-   - 可选配置 (背景设置):
+   - 可选配置 (个性化设置):
      - `BACKGROUND_VIDEO_URL`: 背景视频直链 (例如 `https://example.com/video.mp4`)
-     - `BACKGROUND_MUSIC_URL`: 背景音乐直链 (例如 `https://example.com/music.mp3`)。若不填则使用视频自带声音或静音。
+     - `BACKGROUND_MUSIC_URL`: 背景音乐直链 (例如 `https://example.com/music.mp3`)
+     - `AVATAR_URL`: 关于我页面头像直链 (例如 `https://example.com/me.jpg`)
 6. **KV Binding (KV 绑定)**:
    - 项目创建后，进入 **Settings** -> **Functions**.
    - 找到 **KV Namespace Bindings**.

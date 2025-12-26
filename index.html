@@ -8,12 +8,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class', // 启用基于 class 的暗黑模式
         theme: {
           extend: {
             colors: {
-              glass: "rgba(255, 255, 255, 0.6)",
-              glassBorder: "rgba(255, 255, 255, 0.4)",
-              glassDark: "rgba(15, 23, 42, 0.6)",
+              glass: "var(--glass-bg)",
+              glassBorder: "var(--glass-border)",
+              glassDark: "rgba(15, 23, 42, 0.7)", 
             },
             backdropBlur: {
               xs: '2px',
@@ -23,6 +24,17 @@
       }
     </script>
     <style>
+      :root {
+        --glass-bg: rgba(255, 255, 255, 0.6);
+        --glass-border: rgba(255, 255, 255, 0.4);
+      }
+      
+      /* 暗黑模式下的 CSS 变量重写 */
+      html.dark :root {
+        --glass-bg: rgba(15, 23, 42, 0.75); /* 深色背景 */
+        --glass-border: rgba(255, 255, 255, 0.1); /* 浅色边框 */
+      }
+
       /* Custom Scrollbar for Webkit */
       ::-webkit-scrollbar {
         width: 8px;
@@ -59,7 +71,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-900 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+  <body class="bg-slate-200 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased selection:bg-blue-200 selection:text-blue-900 transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

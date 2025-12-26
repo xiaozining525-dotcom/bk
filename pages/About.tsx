@@ -1,11 +1,19 @@
 import React from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { SiteConfig } from '../types';
 
 export const About: React.FC = () => {
+  // 从 Layout 的 Outlet 接收 Context 配置
+  const config = useOutletContext<SiteConfig>();
+  
+  // 如果 API 还没返回配置（空字符串），暂时显示默认占位符，或者等待加载
+  const avatarSrc = config?.avatarUrl || "https://picsum.photos/300/300";
+
   return (
     <div className="max-w-3xl mx-auto bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-8 md:p-12 shadow-sm">
       <div className="flex flex-col md:flex-row items-center gap-8 mb-8">
         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white/50 shadow-lg">
-            <img src="https://picsum.photos/300/300" alt="Avatar" className="w-full h-full object-cover" />
+            <img src={avatarSrc} alt="Avatar" className="w-full h-full object-cover" />
         </div>
         <div className="text-center md:text-left">
             <h1 className="text-3xl font-bold text-slate-900 mb-2">关于我</h1>

@@ -30,6 +30,7 @@ export interface ApiResponse<T> {
 export interface SiteConfig {
   videoUrl: string;
   musicUrl: string;
+  avatarUrl: string;
 }
 
 export enum LoginStatus {
