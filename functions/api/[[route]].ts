@@ -6,6 +6,7 @@
  * 3. POST /api/posts - Create/Update post (Auth required)
  * 4. DELETE /api/posts?id=xyz - Delete post (Auth required)
  * 5. POST /api/auth - Login check
+ * 6. GET /api/config - Get public site configuration (video/music urls)
  */
 
 // --- Type Definitions for Cloudflare Environment ---
@@ -43,6 +44,8 @@ type PagesFunction<Env = unknown, Params extends string = any, Data = unknown> =
 interface Env {
   BLOG_KV: KVNamespace;
   ADMIN_PASSWORD?: string; // Set in Cloudflare Settings -> Environment Variables
+  BACKGROUND_VIDEO_URL?: string; // Set in Cloudflare Settings
+  BACKGROUND_MUSIC_URL?: string; // Set in Cloudflare Settings
 }
 
 interface PostMetadata {
@@ -63,6 +66,9 @@ const CORS_HEADERS = {
 };
 
 const METADATA_KEY = 'metadata:posts';
+
+// Default fallback video if env var is not set
+const DEFAULT_VIDEO = "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4";
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -100,7 +106,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // --- Routes ---
 
-  // 1. Auth Check
+  // 1. Config (Public) - New route to expose env vars safely
+  if (path === 'config') {
+    return jsonResponse({
+      videoUrl: env.BACKGROUND_VIDEO_URL || DEFAULT_VIDEO,
+      musicUrl: env.BACKGROUND_MUSIC_URL || ""
+    });
+  }
+
+  // 2. Auth Check
   if (path === 'auth' && request.method === 'POST') {
     const body: { password?: string } = await request.json();
     const validPass = env.ADMIN_PASSWORD || 'admin123';
@@ -110,7 +124,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return errorResponse('Invalid password', 401);
   }
 
-  // 2. Posts Management
+  // 3. Posts Management
   if (path.startsWith('posts')) {
     
     // GET List or Single

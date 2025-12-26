@@ -7,17 +7,27 @@ import { Admin } from './pages/Admin';
 import { Login } from './pages/Login';
 import { About } from './pages/About';
 import { ADMIN_TOKEN_KEY } from './constants';
+import { api } from './services/api';
+import { SiteConfig } from './types';
 
 const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '' });
 
   useEffect(() => {
-    // Check local storage for basic session persistence
+    // 1. Check local storage for basic session persistence
     const token = localStorage.getItem(ADMIN_TOKEN_KEY);
     setIsAuthenticated(!!token);
     setIsLoadingAuth(false);
+
+    // 2. Fetch remote config (background video/music)
+    const loadConfig = async () => {
+        const config = await api.getConfig();
+        setSiteConfig(config);
+    };
+    loadConfig();
   }, []);
 
   const handleLogout = () => {
@@ -36,6 +46,7 @@ const App: React.FC = () => {
             setIsMuted={setIsMuted} 
             isAuthenticated={isAuthenticated}
             onLogout={handleLogout}
+            siteConfig={siteConfig}
           />
         }>
           <Route index element={<Home />} />

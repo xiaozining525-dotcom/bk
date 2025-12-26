@@ -5,6 +5,7 @@
 ## 特性
 - **UI风格**: 磨砂玻璃 (Glassmorphism)，全屏动态视频背景，极致响应式。
 - **核心功能**: 博客 CRUD，Markdown 渲染，分类/标签筛选，阅读量统计。
+- **配置化**: 背景视频、音乐、管理员密码均通过环境变量配置。
 - **架构**: 无服务器 (Serverless)，无外部数据库 (NoSQL KV)。
 
 ## 部署步骤 (完全免费)
@@ -27,11 +28,14 @@
 3. 选择你的仓库。
 4. **Build settings (构建设置)**:
    - Framework preset: None / Create React App (如果使用 Vite 需要调整 build command，本代码示例假设直接静态托管或简单的 Vite build)
-   - Build command: `npm run build` (你需要添加 `package.json` 和 Vite 配置，或者直接手动上传 build 后的 `dist` 文件夹)
+   - Build command: `npm run build`
    - Output directory: `dist`
 5. **Environment variables (环境变量)**:
-   - 变量名: `ADMIN_PASSWORD`
-   - 值: `你的管理员登录密码`
+   - 必须配置:
+     - `ADMIN_PASSWORD`: 你的管理员登录密码 (例如 `MySecretPass`)
+   - 可选配置 (背景设置):
+     - `BACKGROUND_VIDEO_URL`: 背景视频直链 (例如 `https://example.com/video.mp4`)
+     - `BACKGROUND_MUSIC_URL`: 背景音乐直链 (例如 `https://example.com/music.mp3`)。若不填则使用视频自带声音或静音。
 6. **KV Binding (KV 绑定)**:
    - 项目创建后，进入 **Settings** -> **Functions**.
    - 找到 **KV Namespace Bindings**.
@@ -48,12 +52,11 @@
    # 绑定 KV (需在 wrangler.toml 或 dashboard 操作)
    npx wrangler pages deploy dist --project-name my-blog
    ```
-3. 记得去 Dashboard 绑定 KV 和设置环境变量 `ADMIN_PASSWORD`。
+3. 记得去 Dashboard 绑定 KV 和设置上述环境变量。
 
 ### 4. 本地开发
 1. 创建 `package.json` (含 `react`, `react-dom`, `vite` 等依赖)。
-2. 运行 `npx wrangler pages dev . --kv=BLOG_KV` (需要本地模拟 KV)。
+2. 运行 `npx wrangler pages dev . --kv=BLOG_KV` (需要本地模拟 KV 和设置 .dev.vars)。
 
 ## 注意事项
-- **背景视频**: 代码中使用了一个在线演示视频。部署时，建议将你的 `background.mp4` 放入 public 目录，并修改 `components/BackgroundVideo.tsx` 中的 `src`。
-- **图片**: 由于 KV 存储限制（且为了节省免费额度），建议文章内的图片使用外部图床链接，直接在 Markdown 中插入 `![](url)`。
+- **图片**: 建议文章内的图片使用外部图床链接，直接在 Markdown 中插入 `![](url)`。

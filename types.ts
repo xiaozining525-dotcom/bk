@@ -27,6 +27,11 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export interface SiteConfig {
+  videoUrl: string;
+  musicUrl: string;
+}
+
 export enum LoginStatus {
   IDLE,
   LOADING,

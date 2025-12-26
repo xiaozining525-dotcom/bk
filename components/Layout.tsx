@@ -1,17 +1,18 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Search, PenTool, User, Home, BookOpen, LogOut } from 'lucide-react';
+import { Search, PenTool, User, Home, LogOut } from 'lucide-react';
 import { BackgroundVideo } from './BackgroundVideo';
-import { ADMIN_TOKEN_KEY } from '../constants';
+import { SiteConfig } from '../types';
 
 interface LayoutProps {
   isMuted: boolean;
   setIsMuted: (val: boolean) => void;
   isAuthenticated: boolean;
   onLogout: () => void;
+  siteConfig: SiteConfig;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ isMuted, setIsMuted, isAuthenticated, onLogout }) => {
+export const Layout: React.FC<LayoutProps> = ({ isMuted, setIsMuted, isAuthenticated, onLogout, siteConfig }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -31,7 +32,12 @@ export const Layout: React.FC<LayoutProps> = ({ isMuted, setIsMuted, isAuthentic
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-800">
-      <BackgroundVideo isMuted={isMuted} setIsMuted={setIsMuted} />
+      <BackgroundVideo 
+        isMuted={isMuted} 
+        setIsMuted={setIsMuted} 
+        videoUrl={siteConfig.videoUrl} 
+        musicUrl={siteConfig.musicUrl} 
+      />
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-40 transition-all duration-300">

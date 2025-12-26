@@ -1,4 +1,4 @@
-import { ApiResponse, BlogPost, PostMetadata } from '../types';
+import { ApiResponse, BlogPost, PostMetadata, SiteConfig } from '../types';
 import { API_BASE, ADMIN_TOKEN_KEY } from '../constants';
 
 const getHeaders = () => {
@@ -10,6 +10,22 @@ const getHeaders = () => {
 };
 
 export const api = {
+  async getConfig(): Promise<SiteConfig> {
+    try {
+        const res = await fetch(`${API_BASE}/config`);
+        const json: ApiResponse<SiteConfig> = await res.json();
+        if (!json.success || !json.data) throw new Error(json.error || 'Failed to load config');
+        return json.data;
+    } catch (e) {
+        console.error("Config load error, using defaults", e);
+        // Fallback for dev/error
+        return { 
+            videoUrl: "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4", 
+            musicUrl: "" 
+        };
+    }
+  },
+
   async getPosts(): Promise<PostMetadata[]> {
     const res = await fetch(`${API_BASE}/posts`);
     const json: ApiResponse<PostMetadata[]> = await res.json();
