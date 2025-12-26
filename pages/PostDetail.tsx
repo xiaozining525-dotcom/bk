@@ -132,7 +132,12 @@ export const PostDetail: React.FC = () => {
                         ),
                         // 优化图片显示
                         img: ({node, ...props}) => (
-                           <img className="rounded-xl shadow-md mx-auto my-6 hover:scale-[1.01] transition-transform duration-300" {...props} alt={props.alt || ''} />
+                           <img 
+                                className="rounded-xl shadow-md mx-auto my-6 hover:scale-[1.01] transition-transform duration-300" 
+                                {...props} 
+                                alt={props.alt || ''} 
+                                referrerPolicy="no-referrer"
+                            />
                         )
                     }}
                 >
