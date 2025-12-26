@@ -15,6 +15,7 @@ export const Admin: React.FC = () => {
     content: '',
     category: '随笔',
     tags: [],
+    url: '',
     id: '',
   };
 
@@ -109,6 +110,14 @@ export const Admin: React.FC = () => {
           
           <input
             type="text"
+            placeholder="相关链接 (URL) - 可选"
+            className="w-full p-3 bg-white/50 border border-white/50 rounded-xl outline-none font-mono text-sm text-slate-600"
+            value={editingPost.url || ''}
+            onChange={e => setEditingPost({...editingPost, url: e.target.value})}
+          />
+          
+          <input
+            type="text"
             placeholder="摘要 (用于列表展示)"
             className="w-full p-3 bg-white/50 border border-white/50 rounded-xl outline-none"
             value={editingPost.excerpt}
@@ -159,7 +168,12 @@ export const Admin: React.FC = () => {
             <tbody>
               {posts.map(post => (
                 <tr key={post.id} className="border-b border-slate-100/30 hover:bg-white/30 transition">
-                  <td className="py-3 px-2 font-medium text-slate-800">{post.title}</td>
+                  <td className="py-3 px-2 font-medium text-slate-800">
+                    <div className="flex flex-col">
+                        <span>{post.title}</span>
+                        {post.url && <span className="text-[10px] text-blue-500 truncate max-w-[200px]">{post.url}</span>}
+                    </div>
+                  </td>
                   <td className="py-3 px-2 text-sm text-slate-600"><span className="bg-white/40 px-2 py-1 rounded">{post.category}</span></td>
                   <td className="py-3 px-2 text-sm text-slate-500">{new Date(post.createdAt).toLocaleDateString()}</td>
                   <td className="py-3 px-2 text-right flex justify-end gap-2">

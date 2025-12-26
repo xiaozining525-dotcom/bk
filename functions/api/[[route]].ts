@@ -53,6 +53,7 @@ interface PostMetadata {
   category: string;
   createdAt: number;
   views: number;
+  url?: string;
 }
 
 const CORS_HEADERS = {
@@ -164,7 +165,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         tags: body.tags || [],
         category: body.category || 'Uncategorized',
         createdAt: body.createdAt,
-        views: body.views || 0
+        views: body.views || 0,
+        url: body.url || ''
       };
 
       if (metaIndex >= 0) {

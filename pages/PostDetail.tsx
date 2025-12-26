@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { BlogPost } from '../types';
 import { api } from '../services/api';
-import { ArrowLeft, Calendar, Tag, User, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Tag, User, Loader2, Link as LinkIcon, ExternalLink } from 'lucide-react';
 
 export const PostDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,12 +60,26 @@ export const PostDetail: React.FC = () => {
                     <span className="flex items-center"><User size={12} className="mr-1"/> Admin</span>
                 </div>
                 <h1 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight mb-6">{post.title}</h1>
-                <div className="flex flex-wrap gap-2">
-                    {post.tags.map(tag => (
-                        <span key={tag} className="flex items-center text-xs text-slate-500 bg-white/50 px-2 py-1 rounded-md border border-white/40">
-                            <Tag size={10} className="mr-1" /> {tag}
-                        </span>
-                    ))}
+                
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap gap-2">
+                        {post.tags.map(tag => (
+                            <span key={tag} className="flex items-center text-xs text-slate-500 bg-white/50 px-2 py-1 rounded-md border border-white/40">
+                                <Tag size={10} className="mr-1" /> {tag}
+                            </span>
+                        ))}
+                    </div>
+
+                    {post.url && (
+                        <a 
+                          href={post.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md hover:shadow-lg text-sm font-medium group"
+                        >
+                          <LinkIcon size={16} /> 访问链接 <ExternalLink size={14} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                        </a>
+                    )}
                 </div>
             </div>
         </div>
