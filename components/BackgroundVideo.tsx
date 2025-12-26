@@ -57,7 +57,8 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-50 bg-slate-200">
         {/* 
             1. 视频本体 
-            修改 'opacity-90' 来调整视频透明度 (opacity-100 为不透明, opacity-50 为半透明)
+            已设置为 opacity-100 (完全不透明)，还原最清晰画质。
+            object-cover 保证视频铺满屏幕。
         */}
         <video
           ref={videoRef}
@@ -73,11 +74,12 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
         </video>
         
         {/* 
-            2. 视觉叠加层 (蒙版)
-            修改 'bg-white/10' 来调整覆盖在视频上的白色浓度 (防止视频太花干扰文字)
-            修改 'backdrop-blur-[1px]' 来调整背景模糊程度 (数值越大越模糊)
+            2. 视觉叠加层
+            已移除 'backdrop-blur-[1px]' 和 'bg-white/...'，
+            现在是完全透明的，没有任何滤镜遮挡视频。
+            如果因为背景太花导致文字看不清，可以在这里加 'bg-black/20' (20%黑)
         */}
-        <div className="absolute inset-0 backdrop-blur-[1px]"></div>
+        <div className="absolute inset-0"></div>
       </div>
 
       {/* Separate Audio Element */}
