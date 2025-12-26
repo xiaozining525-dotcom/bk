@@ -1,27 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { SiteConfig } from '../types';
 
 export const About: React.FC = () => {
-  // 从 Layout 的 Outlet 接收 Context 配置
   const config = useOutletContext<SiteConfig>();
   
-  // 如果 API 还没返回配置（空字符串），暂时显示默认占位符，或者等待加载
-  const avatarSrc = config?.avatarUrl || "https://picsum.photos/300/300";
+  // 默认头像
+  const DEFAULT_AVATAR = "https://picsum.photos/300/300";
+  // 备用头像 (如果默认头像也挂了)
+  const FALLBACK_AVATAR = "https://ui-avatars.com/api/?name=Me&background=random&size=300";
+
+  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
+
+  // 当 config 加载完成后更新头像
+  useEffect(() => {
+    if (config?.avatarUrl) {
+      setAvatarSrc(config.avatarUrl);
+    }
+  }, [config]);
+
+  const handleImageError = () => {
+    // 如果当前加载失败的已经是 fallback 头像，则不再重试，防止死循环
+    if (avatarSrc === FALLBACK_AVATAR) return;
+    
+    // 如果配置的图片加载失败，尝试使用 fallback
+    console.warn("Avatar load failed, switching to fallback.");
+    setAvatarSrc(FALLBACK_AVATAR);
+  };
 
   return (
-    <div className="max-w-3xl mx-auto bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-8 md:p-12 shadow-sm">
+    <div className="max-w-3xl mx-auto bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-8 md:p-12 shadow-sm animate-fade-in">
       <div className="flex flex-col md:flex-row items-center gap-8 mb-8">
-        <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white/50 shadow-lg">
-            <img src={avatarSrc} alt="Avatar" className="w-full h-full object-cover" />
+        <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white/50 shadow-lg flex-shrink-0 bg-slate-200">
+            <img 
+              src={avatarSrc} 
+              alt="Avatar" 
+              className="w-full h-full object-cover" 
+              onError={handleImageError}
+            />
         </div>
         <div className="text-center md:text-left">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">关于我</h1>
-            <p className="text-slate-600">开发者 / 设计爱好者 / 极简主义者</p>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">关于我</h1>
+            <p className="text-slate-600 dark:text-slate-300">开发者 / 设计爱好者 / 极简主义者</p>
         </div>
       </div>
       
-      <div className="prose prose-slate max-w-none text-slate-700">
+      <div className="prose prose-slate dark:prose-invert max-w-none">
         <p>
           你好，欢迎来到我的个人博客。这是一个基于 Cloudflare 免费生态构建的现代化站点。
         </p>
@@ -37,7 +61,7 @@ export const About: React.FC = () => {
         </ul>
         <h3>联系方式</h3>
         <p>
-            Email: <a href="mailto:example@email.com" className="text-blue-600 hover:underline">example@email.com</a>
+            Email: <a href="mailto:example@email.com" className="text-blue-600 hover:underline dark:text-blue-400">example@email.com</a>
         </p>
       </div>
     </div>

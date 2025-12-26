@@ -4,64 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Personal Blog</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class', // 启用基于 class 的暗黑模式
-        theme: {
-          extend: {
-            colors: {
-              glass: "var(--glass-bg)",
-              glassBorder: "var(--glass-border)",
-              glassDark: "rgba(2, 6, 23, 0.8)", 
-            },
-            backdropBlur: {
-              xs: '2px',
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      :root {
-        /* Light Mode: 亮白色半透明 */
-        --glass-bg: rgba(255, 255, 255, 0.65);
-        --glass-border: rgba(255, 255, 255, 0.4);
-      }
-      
-      /* Dark Mode: 深色背景，加深不透明度以提高可读性 */
-      html.dark :root {
-        --glass-bg: rgba(2, 6, 23, 0.85); /* 接近黑色的深蓝，85% 不透明度 */
-        --glass-border: rgba(255, 255, 255, 0.08); /* 极细微的边框 */
-      }
-
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(100, 116, 139, 0.5); 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(71, 85, 105, 0.7); 
-      }
-      
-      body {
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        overflow-x: hidden;
-      }
-      
-      /* 文本平滑渲染 */
-      .antialiased {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-    </style>
   <script type="importmap">
 {
   "imports": {
