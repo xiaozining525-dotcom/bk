@@ -55,9 +55,13 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
   return (
     <>
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-50 bg-slate-200">
+        {/* 
+            1. 视频本体 
+            修改 'opacity-90' 来调整视频透明度 (opacity-100 为不透明, opacity-50 为半透明)
+        */}
         <video
           ref={videoRef}
-          className="absolute min-w-full min-h-full object-cover w-auto h-auto top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-90"
+          className="absolute min-w-full min-h-full object-cover w-auto h-auto top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-100"
           playsInline
           autoPlay
           loop
@@ -67,8 +71,13 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
         >
             Your browser does not support the video tag.
         </video>
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]"></div>
+        
+        {/* 
+            2. 视觉叠加层 (蒙版)
+            修改 'bg-white/10' 来调整覆盖在视频上的白色浓度 (防止视频太花干扰文字)
+            修改 'backdrop-blur-[1px]' 来调整背景模糊程度 (数值越大越模糊)
+        */}
+        <div className="absolute inset-0 backdrop-blur-[1px]"></div>
       </div>
 
       {/* Separate Audio Element */}
