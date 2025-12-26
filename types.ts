@@ -7,6 +7,7 @@ export interface BlogPost {
   category: string;
   createdAt: number;
   views: number;
+  url?: string;
 }
 
 export interface PostMetadata {
@@ -17,6 +18,7 @@ export interface PostMetadata {
   category: string;
   createdAt: number;
   views: number;
+  url?: string;
 }
 
 export interface ApiResponse<T> {
