@@ -37,10 +37,11 @@ export const About: React.FC = () => {
               alt="Avatar" 
               className="w-full h-full object-cover" 
               onError={handleImageError}
+              referrerPolicy="no-referrer"
             />
         </div>
         <div className="text-center md:text-left">
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">关于我</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">关于我(忆柠))</h1>
             <p className="text-slate-600 dark:text-slate-300">开发者 / 设计爱好者 / 极简主义者</p>
         </div>
       </div>
@@ -61,7 +62,7 @@ export const About: React.FC = () => {
         </ul>
         <h3>联系方式</h3>
         <p>
-            Email: <a href="mailto:example@email.com" className="text-blue-600 hover:underline dark:text-blue-400">example@email.com</a>
+            Email: <a href="mailto:qqdzz789@gmail.com" className="text-blue-600 hover:underline dark:text-blue-400">example@email.com</a>
         </p>
       </div>
     </div>
