@@ -41,7 +41,7 @@ export const About: React.FC = () => {
             />
         </div>
         <div className="text-center md:text-left">
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">关于我(忆柠))</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">关于我(忆柠)</h1>
             <p className="text-slate-600 dark:text-slate-300">开发者 / 设计爱好者 / 极简主义者</p>
         </div>
       </div>
