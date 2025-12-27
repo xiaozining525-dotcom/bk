@@ -373,6 +373,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (currentUser.role !== 'admin') {
               if (requestedPerms.includes('all')) return errorResponse("Permission denied: Cannot grant admin privileges", 403);
               
+              // NEW RULE: Only Admin can grant 'manage_users'
+              if (requestedPerms.includes('manage_users')) {
+                  return errorResponse("Permission denied: Only Super Admin can grant Account Management permissions", 403);
+              }
+
               const userPerms = currentUser.permissions || [];
               const hasAllRequested = requestedPerms.every(p => userPerms.includes(p));
               
@@ -423,6 +428,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const requestedPerms: string[] = body.permissions;
           if (currentUser.role !== 'admin') {
               if (requestedPerms.includes('all')) return errorResponse("Permission denied: Cannot grant admin privileges", 403);
+
+              // NEW RULE: Only Admin can grant 'manage_users'
+              if (requestedPerms.includes('manage_users')) {
+                  return errorResponse("Permission denied: Only Super Admin can grant Account Management permissions", 403);
+              }
 
               const userPerms = currentUser.permissions || [];
               const hasAllRequested = requestedPerms.every(p => userPerms.includes(p));

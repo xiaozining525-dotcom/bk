@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // Import Portal
 import { api } from '../services/api';
 import { BlogPost, PostMetadata, UserProfile } from '../types';
 import { CATEGORIES } from '../constants';
@@ -155,9 +156,6 @@ export const Admin: React.FC = () => {
       e.preventDefault();
       if(!newUser.username || !newUser.password) return;
       try {
-          // If no permissions selected, default to 'manage_contents' (create posts) if possible, 
-          // but we should respect user selection. If selection is empty, it sends empty array.
-          // The backend defaults are handled there if needed, but here we just send what is checked.
           const perms = newUser.permissions; 
           await api.addUser(newUser.username, newUser.password, perms);
           setMessage('用户创建成功');
@@ -507,7 +505,10 @@ export const Admin: React.FC = () => {
                             <label className="text-sm font-medium mb-2 block">权限分配</label>
                             <div className="space-y-2">
                                 {PERMISSION_CONFIG.map(perm => {
-                                    // Only show permission option if current user has it (or is admin)
+                                    // Rule: Only Super Admin can see 'manage_users' option
+                                    if (perm.key === 'manage_users' && !isAdmin) return null;
+                                    
+                                    // Rule: For other permissions, check if current user has them
                                     if (!isAdmin && !currentUser?.permissions.includes(perm.key)) return null;
                                     
                                     return (
@@ -535,44 +536,44 @@ export const Admin: React.FC = () => {
                 </div>
             ) : (
                 <>
-                {/* 1. Mobile Card View */}
-                <div className="md:hidden space-y-4">
+                {/* 1. Mobile Card View (Optimized for Crowding & Dark Mode) */}
+                <div className="md:hidden space-y-3">
                     {users.map(u => (
-                        <div key={u.username} className="bg-white/40 dark:bg-white/5 p-4 rounded-xl border border-white/20 dark:border-white/10 shadow-sm relative overflow-hidden">
+                        <div key={u.username} className="bg-white/40 dark:bg-black/40 p-3 rounded-xl border border-white/20 dark:border-white/5 shadow-sm relative overflow-hidden backdrop-blur-sm">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300 uppercase">
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">
                                         {u.username.slice(0, 1)}
                                     </div>
                                     <div>
-                                        <div className="font-bold text-slate-800 dark:text-slate-100">{u.username}</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</div>
+                                        <div className="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">{u.username}</div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</div>
                                     </div>
                                 </div>
                                 {u.role === 'admin' ? (
-                                    <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold">Admin</span>
+                                    <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Admin</span>
                                 ) : (
-                                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">Editor</span>
+                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">Editor</span>
                                 )}
                             </div>
 
-                            <div className="mt-3 text-sm text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-black/20 p-2 rounded-lg">
-                                <span className="text-xs text-slate-500 block mb-1">权限:</span>
+                            <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-black/30 p-2 rounded-lg">
+                                <span className="text-[10px] text-slate-500 block mb-0.5">权限:</span>
                                 {u.role === 'admin' ? 'all' : u.permissions.join(', ') || '无'}
                             </div>
 
                             {u.role !== 'admin' && (
-                                <div className="mt-4 flex gap-2">
+                                <div className="mt-3 flex gap-2">
                                     <button 
                                         onClick={() => openEditUserModal(u)}
-                                        className="flex-1 py-2 text-sm bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
+                                        className="flex-1 py-1.5 text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
                                     >
                                         修改权限
                                     </button>
                                     {u.username !== currentUser?.username && (
                                         <button 
                                             onClick={() => handleDeleteUser(u.username)}
-                                            className="flex-1 py-2 text-sm bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded-lg font-medium"
+                                            className="flex-1 py-1.5 text-xs bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded-lg font-medium"
                                         >
                                             删除
                                         </button>
@@ -607,7 +608,6 @@ export const Admin: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-2 font-medium">{u.username}</td>
                                     <td className="py-3 px-2 text-xs text-slate-500">
-                                        {/* Changed: Display 'all' for admin instead of Chinese */}
                                         {u.role === 'admin' ? 'all' : u.permissions.join(', ') || '无'}
                                     </td>
                                     <td className="py-3 px-2 text-sm text-slate-500">
@@ -646,9 +646,9 @@ export const Admin: React.FC = () => {
           </>
       )}
 
-      {/* --- Edit User Permissions Modal --- */}
-      {editingUserPerms && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+      {/* --- Edit User Permissions Modal (Using Portal for better positioning) --- */}
+      {editingUserPerms && createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
               <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/20">
                   <div className="flex justify-between items-center mb-6">
                       <h3 className="text-xl font-bold dark:text-white">修改权限: {editingUserPerms.username}</h3>
@@ -659,7 +659,10 @@ export const Admin: React.FC = () => {
 
                   <div className="space-y-3 mb-8">
                       {PERMISSION_CONFIG.map(perm => {
-                            // Only show permission option if current user has it (or is admin)
+                            // Rule: Only Super Admin can see 'manage_users' option
+                            if (perm.key === 'manage_users' && !isAdmin) return null;
+
+                            // Rule: For other permissions, check if current user has them
                             if (!isAdmin && !currentUser?.permissions.includes(perm.key)) return null;
 
                             const isChecked = editingUserPerms.permissions.includes(perm.key);
@@ -709,7 +712,8 @@ export const Admin: React.FC = () => {
                       </button>
                   </div>
               </div>
-          </div>
+          </div>,
+          document.body // Portal Target
       )}
     </div>
   );
