@@ -42,7 +42,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 turnstileRef.current.innerHTML = '';
                 
                 widgetId.current = window.turnstile.render(turnstileRef.current, {
-                    sitekey: '0x4AAAAAAACET-vXK-qGjXdbv', // 您的真实 Site Key
+                    sitekey: '0x4AAAAAACEt-vXK-qGjXdbv', // 您的真实 Site Key
                     callback: (t: string) => {
                         setToken(t);
                         setError(''); // Clear error on success
