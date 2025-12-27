@@ -48,3 +48,15 @@ export enum LoginStatus {
   SUCCESS,
   FAILED,
 }
+
+// New interfaces for Auth
+export interface User {
+  username: string;
+  passwordHash: string;
+  salt: string;
+  createdAt: number;
+}
+
+export interface SetupStatus {
+  isSetup: boolean;
+}

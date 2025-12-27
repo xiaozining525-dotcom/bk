@@ -1,4 +1,4 @@
-import { ApiResponse, BlogPost, PostMetadata, SiteConfig, PaginatedResponse } from '../types';
+import { ApiResponse, BlogPost, PostMetadata, SiteConfig, PaginatedResponse, SetupStatus } from '../types';
 import { API_BASE, ADMIN_TOKEN_KEY } from '../constants';
 
 const getHeaders = () => {
@@ -24,6 +24,28 @@ export const api = {
             avatarUrl: "https://picsum.photos/300/300"
         };
     }
+  },
+
+  async checkSetup(): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/setup-check`);
+      const json: ApiResponse<SetupStatus> = await res.json();
+      // If success is true, data.isSetup tells us if users exist
+      return json.success && json.data ? json.data.isSetup : true; 
+    } catch (e) {
+      return true; // Default to true (assume setup) on error to prevent exposing register page
+    }
+  },
+
+  async register(username: string, password: string, turnstileToken?: string): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, turnstileToken }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    return true;
   },
 
   // Updated to support Server-side Filtering

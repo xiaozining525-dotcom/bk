@@ -5,6 +5,7 @@ import { Home } from './pages/Home';
 import { PostDetail } from './pages/PostDetail';
 import { Admin } from './pages/Admin';
 import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 import { About } from './pages/About';
 import { ADMIN_TOKEN_KEY } from './constants';
 import { api } from './services/api';
@@ -43,6 +44,7 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isSetupCompleted, setIsSetupCompleted] = useState(true); // Default true to avoid flash
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '', avatarUrl: '' });
 
   useEffect(() => {
@@ -51,12 +53,16 @@ const App: React.FC = () => {
     setIsAuthenticated(!!token);
     setIsLoadingAuth(false);
 
-    // Fetch remote config (background video/music/avatar)
-    const loadConfig = async () => {
-        const config = await api.getConfig();
+    // Fetch remote config and Check Setup Status
+    const init = async () => {
+        const [config, setupStatus] = await Promise.all([
+            api.getConfig(),
+            api.checkSetup()
+        ]);
         setSiteConfig(config);
+        setIsSetupCompleted(setupStatus);
     };
-    loadConfig();
+    init();
   }, []);
 
   const handleLogout = () => {
@@ -83,8 +89,17 @@ const App: React.FC = () => {
           <Route index element={<Home />} />
           <Route path="post/:id" element={<PostDetail />} />
           <Route path="about" element={<About />} />
+          
+          {/* Login Route: If not setup, redirect to register */}
           <Route path="login" element={
-            isAuthenticated ? <Navigate to="/admin" replace /> : <Login onLoginSuccess={() => setIsAuthenticated(true)} />
+            !isSetupCompleted ? <Navigate to="/register" replace /> :
+            isAuthenticated ? <Navigate to="/admin" replace /> : 
+            <Login onLoginSuccess={() => setIsAuthenticated(true)} />
+          } />
+
+          {/* Register Route: Only accessible if setup is NOT completed */}
+          <Route path="register" element={
+             isSetupCompleted ? <Navigate to="/login" replace /> : <Register />
           } />
           
           {/* Protected Admin Route */}

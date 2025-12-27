@@ -3,9 +3,8 @@
  * Features:
  * - KV backed storage
  * - Session-based Authentication (Secure)
- * - Rate Limiting (Brute-force protection)
- * - Server-side Filtering
- * - Draft System
+ * - PBKDF2 Password Hashing
+ * - One-time Registration System
  */
 
 // Define Cloudflare Workers types
@@ -34,7 +33,7 @@ type PagesFunction<Env = unknown, P extends string = string, Data = unknown> = (
 
 interface Env {
   BLOG_KV: KVNamespace;
-  ADMIN_PASSWORD?: string;
+  // ADMIN_PASSWORD is deprecated in favor of KV users
   BACKGROUND_VIDEO_URL?: string;
   BACKGROUND_MUSIC_URL?: string;
   AVATAR_URL?: string;
@@ -53,6 +52,13 @@ interface PostMetadata {
   status?: 'published' | 'draft';
 }
 
+interface User {
+    username: string;
+    passwordHash: string;
+    salt: string;
+    createdAt: number;
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -60,11 +66,62 @@ const CORS_HEADERS = {
 };
 
 const METADATA_KEY = 'metadata:posts';
+const USERS_KEY = 'sys:users';
 const SESSION_PREFIX = 'session:';
 const LIMIT_PREFIX = 'rate_limit:';
 
 const DEFAULT_VIDEO = "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4";
 const DEFAULT_AVATAR = "https://picsum.photos/300/300";
+
+// --- Crypto Helpers ---
+
+// Convert ArrayBuffer to Hex String
+function buf2hex(buffer: ArrayBuffer) {
+    return [...new Uint8Array(buffer)]
+        .map(x => x.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// Convert Hex String to Uint8Array
+function hex2buf(hexString: string) {
+    return new Uint8Array(hexString.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+}
+
+// Hash password using PBKDF2
+async function hashPassword(password: string, salt: Uint8Array | null = null) {
+    const enc = new TextEncoder();
+    
+    // 1. Generate or use salt
+    if (!salt) {
+        salt = crypto.getRandomValues(new Uint8Array(16));
+    }
+
+    // 2. Import password
+    const keyMaterial = await crypto.subtle.importKey(
+        "raw", 
+        enc.encode(password), 
+        { name: "PBKDF2" }, 
+        false, 
+        ["deriveBits", "deriveKey"]
+    );
+
+    // 3. Derive key
+    const derivedBits = await crypto.subtle.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        256
+    );
+
+    return {
+        hash: buf2hex(derivedBits),
+        salt: buf2hex(salt)
+    };
+}
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -121,6 +178,28 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     await env.BLOG_KV.put(key, newCount.toString(), { expirationTtl: 900 }); 
   };
 
+  const verifyTurnstile = async (token: string, ip: string) => {
+      if (!env.TURNSTILE_SECRET_KEY) return true; // Bypass if not configured
+      if (!token) return false;
+
+      const formData = new FormData();
+      formData.append('secret', env.TURNSTILE_SECRET_KEY);
+      formData.append('response', token);
+      formData.append('remoteip', ip);
+
+      try {
+        const tsResult = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST',
+          body: formData,
+        });
+        const tsOutcome: any = await tsResult.json();
+        return tsOutcome.success;
+      } catch (e) {
+        console.error("Turnstile error", e);
+        return false;
+      }
+  };
+
   // --- Routes ---
 
   // 1. Config (Public)
@@ -132,7 +211,42 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }, 200, 3600);
   }
 
-  // 2. Auth Login with Turnstile
+  // 2. Setup Check (Does admin exist?)
+  if (path === 'setup-check') {
+      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
+      return jsonResponse({ isSetup: !!(users && users.length > 0) });
+  }
+
+  // 3. Register (Only allowed if no users exist)
+  if (path === 'register' && request.method === 'POST') {
+      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
+      if (users && users.length > 0) {
+          return errorResponse("Setup already completed.", 403);
+      }
+
+      const body: any = await request.json();
+      if (!body.username || !body.password) return errorResponse("Missing fields");
+
+      // Verify Turnstile
+      const ip = getIp();
+      if (!await verifyTurnstile(body.turnstileToken, ip)) {
+          return errorResponse('Captcha validation failed', 400);
+      }
+
+      const { hash, salt } = await hashPassword(body.password);
+      
+      const newUser: User = {
+          username: body.username,
+          passwordHash: hash,
+          salt: salt,
+          createdAt: Date.now()
+      };
+
+      await env.BLOG_KV.put(USERS_KEY, JSON.stringify([newUser]));
+      return jsonResponse({ message: "Registration successful" });
+  }
+
+  // 4. Auth Login
   if (path === 'auth' && request.method === 'POST') {
     const ip = getIp();
     if (!(await checkRateLimit(ip))) {
@@ -141,41 +255,38 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     const body: { password?: string; turnstileToken?: string } = await request.json();
 
-    if (env.TURNSTILE_SECRET_KEY && body.turnstileToken) {
-      const formData = new FormData();
-      formData.append('secret', env.TURNSTILE_SECRET_KEY);
-      formData.append('response', body.turnstileToken);
-      formData.append('remoteip', ip);
+    if (!await verifyTurnstile(body.turnstileToken, ip)) {
+        return errorResponse('Captcha validation failed', 400);
+    }
 
-      try {
-        const tsResult = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-          method: 'POST',
-          body: formData,
-        });
-        const tsOutcome: any = await tsResult.json();
-        if (!tsOutcome.success) {
-           return errorResponse('Captcha validation failed', 400);
+    // Get Users from KV
+    const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
+    
+    // Check 1: KV Users exist?
+    if (users && users.length > 0) {
+        // Authenticate against the first user (Admin)
+        const admin = users[0];
+        const inputHashObj = await hashPassword(body.password || '', hex2buf(admin.salt));
+        
+        if (inputHashObj.hash === admin.passwordHash) {
+             const token = crypto.randomUUID();
+             await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
+             await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
+             return jsonResponse({ token });
         }
-      } catch (e) {
-        console.error("Turnstile error", e);
-      }
-    } else if (env.TURNSTILE_SECRET_KEY && !body.turnstileToken) {
-        return errorResponse('Captcha token missing', 400);
+    } 
+    // Check 2: Fallback to LEGACY env variable if no KV users yet (so existing deployments don't break immediately)
+    else if (process.env.ADMIN_PASSWORD && body.password === process.env.ADMIN_PASSWORD) {
+         const token = crypto.randomUUID();
+         await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
+         return jsonResponse({ token });
     }
 
-    const validPass = env.ADMIN_PASSWORD || 'admin123';
-    if (body.password === validPass) {
-      const token = crypto.randomUUID();
-      await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
-      await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
-      return jsonResponse({ token });
-    } else {
-      await incrementRateLimit(ip);
-      return errorResponse('Invalid password', 401);
-    }
+    await incrementRateLimit(ip);
+    return errorResponse('Invalid credentials', 401);
   }
 
-  // 3. Posts Management
+  // 5. Posts Management
   if (path.startsWith('posts')) {
     const isAuthenticated = await checkAuth();
 
