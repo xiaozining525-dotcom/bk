@@ -273,7 +273,33 @@ export const PostDetail: React.FC = () => {
                                         alt={props.alt || ''} 
                                         referrerPolicy="no-referrer"
                                     />
-                                )
+                                ),
+                                a: ({node, href, children, ...props}) => {
+                                    if (!href) return <a {...props}>{children}</a>;
+                                    
+                                    // 检查是否为视频链接
+                                    const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(href);
+                                    
+                                    if (isVideo) {
+                                        return (
+                                            <video 
+                                                controls 
+                                                className="w-full rounded-xl shadow-md my-6 bg-black"
+                                                src={href}
+                                                title={typeof children === 'string' ? children : undefined}
+                                                preload="metadata"
+                                            >
+                                                <a href={href} target="_blank" rel="noopener noreferrer" className="underline text-blue-500">{children || '下载视频'}</a>
+                                            </video>
+                                        );
+                                    }
+                                    
+                                    return (
+                                        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                                            {children}
+                                        </a>
+                                    );
+                                }
                             }}
                         >
                             {post.content}
