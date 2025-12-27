@@ -22,26 +22,54 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const widgetId = useRef<string | null>(null);
   const navigate = useNavigate();
 
-  // Initialize Cloudflare Turnstile
+  // Initialize Cloudflare Turnstile with retry mechanism
   useEffect(() => {
-    if (window.turnstile && turnstileRef.current && !widgetId.current) {
-        try {
-            widgetId.current = window.turnstile.render(turnstileRef.current, {
-                sitekey: '0x4AAAAAAA-GKwE4_y_5z5t2', // Replace with your SITE KEY from Cloudflare Dashboard (Use Test key or your real key)
-                // Note: '0x4AAAAAAA-GKwE4_y_5z5t2' is a Cloudflare testing sitekey that always passes.
-                // You must replace this with your real sitekey for production.
-                callback: (t: string) => setToken(t),
-                'error-callback': () => setError('验证失败，请刷新重试'),
-            });
-        } catch (e) {
-            console.error("Turnstile render error", e);
+    let intervalId: any = null;
+
+    const renderWidget = () => {
+        if (window.turnstile && turnstileRef.current && !widgetId.current) {
+            try {
+                // Clear any existing content to prevent duplicates
+                turnstileRef.current.innerHTML = '';
+                
+                widgetId.current = window.turnstile.render(turnstileRef.current, {
+                    sitekey: '0x4AAAAAAA-GKwE4_y_5z5t2', // Replace with your REAL Site Key for production
+                    callback: (t: string) => setToken(t),
+                    'error-callback': (err: any) => {
+                        console.error('Turnstile Error:', err);
+                        setError('验证组件加载失败，请检查 Site Key 配置');
+                    },
+                    'expired-callback': () => {
+                        setError('验证已过期，请重试');
+                        setToken('');
+                    },
+                    theme: 'auto',
+                });
+                return true;
+            } catch (e) {
+                console.error("Turnstile render error", e);
+                return false;
+            }
         }
+        return false;
+    };
+
+    // Attempt to render immediately
+    if (!renderWidget()) {
+        // If script hasn't loaded yet, poll for it
+        intervalId = setInterval(() => {
+            if (renderWidget()) {
+                clearInterval(intervalId);
+            }
+        }, 100);
     }
     
     return () => {
-        // Cleanup if needed (Turnstile usually handles this, but good practice to reset if unmounting)
+        if (intervalId) clearInterval(intervalId);
         if (window.turnstile && widgetId.current) {
-             window.turnstile.remove(widgetId.current);
+             try {
+                 window.turnstile.remove(widgetId.current);
+             } catch(e) {}
              widgetId.current = null;
         }
     };
@@ -51,8 +79,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError('');
 
-    // Check if script loaded
-    if (!token && window.turnstile) {
+    if (!token) {
         setError('请完成人机验证');
         return;
     }
@@ -99,9 +126,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
           </div>
           
-          {/* Turnstile Container */}
+          {/* Turnstile Container - Removed 'cf-turnstile' class to avoid auto-render conflict */}
           <div className="flex justify-center min-h-[65px]">
-            <div ref={turnstileRef} className="cf-turnstile"></div>
+            <div ref={turnstileRef} className="w-full flex justify-center"></div>
           </div>
 
           <button
