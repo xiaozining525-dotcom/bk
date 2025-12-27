@@ -1,5 +1,4 @@
 import React, { useRef, useEffect } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
 
 interface BackgroundVideoProps {
   isMuted: boolean;
@@ -58,10 +57,6 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
     }
   }, [videoUrl, musicUrl]);
 
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-  };
-
   if (!videoUrl) return null;
 
   return (
@@ -82,7 +77,7 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
         </video>
         
         {/* 
-            智能遮罩层 (关键修改)：
+            智能遮罩层:
             - Light 模式: bg-white/10 (轻微提亮，保持清透)
             - Dark 模式: bg-black/60 (大幅压暗视频，确保白色文字清晰可读)
         */}
@@ -95,19 +90,6 @@ export const BackgroundVideo: React.FC<BackgroundVideoProps> = ({ isMuted, setIs
       {musicUrl && (
         <audio ref={audioRef} src={musicUrl} autoPlay loop muted={isMuted} />
       )}
-
-      {/* Floating Audio Control */}
-      <button
-        onClick={toggleMute}
-        className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-white/30 dark:bg-black/40 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-lg text-slate-800 dark:text-white hover:bg-white/50 dark:hover:bg-black/60 transition-all duration-300 group"
-        title={isMuted ? "开启声音" : "静音"}
-      >
-        {isMuted ? (
-          <VolumeX size={20} className="group-hover:scale-110 transition-transform" />
-        ) : (
-          <Volume2 size={20} className="group-hover:scale-110 transition-transform" />
-        )}
-      </button>
     </>
   );
 };

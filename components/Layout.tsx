@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Search, PenTool, User, Home, LogOut, Menu, X, Sun, Moon, LayoutDashboard } from 'lucide-react';
+import { Search, PenTool, User, Home, LogOut, Menu, X, Sun, Moon, LayoutDashboard, Volume2, VolumeX, ArrowUp } from 'lucide-react';
 import { BackgroundVideo } from './BackgroundVideo';
 import { SiteConfig } from '../types';
 
@@ -26,6 +26,21 @@ export const Layout: React.FC<LayoutProps> = ({
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // 监听滚动以控制“回到顶部”按钮的显示
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +51,13 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const closeSidebar = () => setIsSidebarOpen(false);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-base font-medium ${
@@ -60,7 +82,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
           <div className="backdrop-filter backdrop-blur-md bg-glass border border-glassBorder rounded-2xl shadow-lg px-6 py-3 flex items-center justify-between">
             
-            {/* Logo Trigger Sidebar */}
+            {/* Left Side: Sidebar Trigger + Logo */}
             <div 
                 className="flex items-center gap-2 cursor-pointer group" 
                 onClick={() => setIsSidebarOpen(true)}
@@ -72,8 +94,17 @@ export const Layout: React.FC<LayoutProps> = ({
               <span className="font-bold text-lg tracking-tight hidden sm:block group-hover:opacity-80 transition-opacity drop-shadow-sm">MyBlog</span>
             </div>
 
-            {/* Right Side: Search */}
-            <div className="flex items-center gap-4">
+            {/* Right Side: Search & Music Control */}
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Music Toggle (Moved to Top) */}
+              <button
+                onClick={() => setIsMuted(!isMuted)}
+                className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-slate-600 dark:text-slate-300"
+                title={isMuted ? "开启背景音乐" : "静音"}
+              >
+                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
+
               <form onSubmit={handleSearch} className="relative group">
                 <input
                   type="text"
@@ -170,6 +201,17 @@ export const Layout: React.FC<LayoutProps> = ({
           &copy; {new Date().getFullYear()} My Personal Blog. Powered by Cloudflare Pages & KV.
         </div>
       </footer>
+
+      {/* Scroll to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-8 right-8 z-50 p-3 rounded-full bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-xl border border-white/10 transition-all duration-500 ease-in-out transform hover:scale-110 ${
+            showScrollTop ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-20 opacity-0 pointer-events-none'
+        }`}
+        title="回到顶部"
+      >
+        <ArrowUp size={24} />
+      </button>
     </div>
   );
 };
