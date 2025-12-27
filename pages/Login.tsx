@@ -14,7 +14,7 @@ declare global {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState(''); // Changed: Removed default 'admin' value
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -135,7 +135,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="用户名"
+              placeholder="用户名 (例: admin)" 
               className="w-full pl-12 pr-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all dark:text-white placeholder-slate-500"
               autoFocus
             />
