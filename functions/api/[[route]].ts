@@ -1,20 +1,41 @@
 /**
- * Cloudflare Pages Function
- * Features:
- * - KV backed storage
- * - Session-based Authentication (Secure)
- * - PBKDF2 Password Hashing
- * - One-time Registration System
- * - Role Based Access Control (RBAC)
+ * Cloudflare Pages Function with D1 (SQL)
+ * 
+ * Storage Strategy:
+ * - Content (Posts, Users): Stored in D1 SQL Database for complex querying and pagination.
+ * - Ephemeral (Sessions, Rate Limits): Stored in KV for automatic TTL expiration.
  */
 
-// Define Cloudflare Workers types
 interface KVNamespace {
   get(key: string, options?: { cacheTtl?: number }): Promise<string | null>;
-  get(key: string, type: "text"): Promise<string | null>;
-  get<T = unknown>(key: string, type: "json"): Promise<T | null>;
   put(key: string, value: string | ReadableStream | ArrayBuffer, options?: { expiration?: number; expirationTtl?: number; metadata?: any }): Promise<void>;
   delete(key: string): Promise<void>;
+}
+
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  dump(): Promise<ArrayBuffer>;
+  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
+  exec(query: string): Promise<D1ExecResult>;
+}
+
+interface D1PreparedStatement {
+  bind(...values: any[]): D1PreparedStatement;
+  first<T = unknown>(colName?: string): Promise<T | null>;
+  run<T = unknown>(): Promise<D1Result<T>>;
+  all<T = unknown>(): Promise<D1Result<T>>;
+}
+
+interface D1Result<T = unknown> {
+  results: T[];
+  success: boolean;
+  error?: string;
+  meta: any;
+}
+
+interface D1ExecResult {
+  count: number;
+  duration: number;
 }
 
 interface EventContext<Env, P extends string, Data> {
@@ -33,13 +54,38 @@ type PagesFunction<Env = unknown, P extends string = string, Data = unknown> = (
 ) => Response | Promise<Response>;
 
 interface Env {
-  BLOG_KV: KVNamespace;
+  BLOG_KV: KVNamespace; // Keep KV for Sessions & Rate Limiting (TTL support)
+  DB: D1Database;       // New: D1 for Content & Users
   BACKGROUND_VIDEO_URL?: string;
   BACKGROUND_MUSIC_URL?: string;
   AVATAR_URL?: string;
   TURNSTILE_SECRET_KEY?: string; 
 }
 
+// Database Interfaces
+interface DBPost {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  tags: string; // Stored as JSON string
+  category: string;
+  createdAt: number;
+  views: number;
+  url: string;
+  status: 'published' | 'draft';
+}
+
+interface DBUser {
+    username: string;
+    passwordHash: string;
+    salt: string;
+    createdAt: number;
+    role: 'admin' | 'editor';
+    permissions: string; // Stored as JSON string
+}
+
+// API Response Interfaces
 interface PostMetadata {
   id: string;
   title: string;
@@ -49,16 +95,14 @@ interface PostMetadata {
   createdAt: number;
   views: number;
   url?: string;
-  status?: 'published' | 'draft';
+  status: 'published' | 'draft';
 }
 
 interface User {
     username: string;
-    passwordHash: string;
-    salt: string;
-    createdAt: number;
     role: 'admin' | 'editor';
     permissions: string[];
+    createdAt?: number;
 }
 
 const CORS_HEADERS = {
@@ -67,8 +111,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-const METADATA_KEY = 'metadata:posts';
-const USERS_KEY = 'sys:users';
 const SESSION_PREFIX = 'session:';
 const LIMIT_PREFIX = 'rate_limit:';
 
@@ -147,29 +189,26 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const getIp = () => request.headers.get('CF-Connecting-IP') || 'unknown';
 
   // Return the full user object if valid, else null
-  const getAuthenticatedUser = async (): Promise<User | null> => {
+  const getAuthenticatedUser = async (): Promise<User & {role: string} | null> => {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return null;
     const token = authHeader.replace('Bearer ', '');
-    const username = await env.BLOG_KV.get(`${SESSION_PREFIX}${token}`);
     
+    // Check KV for session validity
+    const username = await env.BLOG_KV.get(`${SESSION_PREFIX}${token}`);
     if (!username) return null;
     
-    const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
-    if (!users) return null;
+    // Fetch User details from D1
+    const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first<DBUser>();
+    
+    if (!user) return null;
 
-    if (username === 'valid') {
-        // Fallback for legacy admin
-        const found = users.find(u => u.role === 'admin' || !u.role);
-        return found ? { ...found, role: 'admin', permissions: ['all'] } : null;
-    }
-
-    const found = users.find(u => u.username === username);
-    if (found && !found.role) {
-        // Legacy user without role => Admin
-        return { ...found, role: 'admin', permissions: ['all'] };
-    }
-    return found || null;
+    return {
+        username: user.username,
+        role: user.role || 'admin',
+        permissions: JSON.parse(user.permissions || '[]'),
+        createdAt: user.createdAt
+    };
   };
 
   const checkRateLimit = async (ip: string): Promise<boolean> => {
@@ -209,7 +248,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
   };
 
-  // Check if user has specific permission
   const hasPermission = (user: User, perm: string) => {
       if (user.role === 'admin') return true;
       if (user.permissions?.includes('all')) return true;
@@ -229,14 +267,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 2. Setup Check
   if (path === 'setup-check') {
-      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
-      return jsonResponse({ isSetup: !!(users && users.length > 0) });
+      const countResult = await env.DB.prepare('SELECT count(*) as count FROM users').first<{count: number}>();
+      const isSetup = countResult ? countResult.count > 0 : false;
+      return jsonResponse({ isSetup });
   }
 
   // 3. Register (Only for first Admin)
   if (path === 'register' && request.method === 'POST') {
-      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
-      if (users && users.length > 0) {
+      const countResult = await env.DB.prepare('SELECT count(*) as count FROM users').first<{count: number}>();
+      if (countResult && countResult.count > 0) {
           return errorResponse("Setup already completed.", 403);
       }
 
@@ -250,16 +289,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
       const { hash, salt } = await hashPassword(body.password);
       
-      const newUser: User = {
-          username: body.username,
-          passwordHash: hash,
-          salt: salt,
-          createdAt: Date.now(),
-          role: 'admin',
-          permissions: ['all']
-      };
+      await env.DB.prepare(
+          'INSERT INTO users (username, passwordHash, salt, createdAt, role, permissions) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(
+          body.username, 
+          hash, 
+          salt, 
+          Date.now(), 
+          'admin', 
+          JSON.stringify(['all'])
+      ).run();
 
-      await env.BLOG_KV.put(USERS_KEY, JSON.stringify([newUser]));
       return jsonResponse({ message: "Registration successful" });
   }
 
@@ -276,30 +316,24 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return errorResponse('Captcha validation failed', 400);
     }
 
-    const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
+    const targetUser = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(body.username).first<DBUser>();
     
-    if (users && users.length > 0) {
-        const targetUser = users.find(u => u.username === body.username);
-        
-        if (targetUser) {
-             const inputHashObj = await hashPassword(body.password || '', hex2buf(targetUser.salt));
-             if (inputHashObj.hash === targetUser.passwordHash) {
-                 const token = crypto.randomUUID();
-                 // Store username in session so we know who logged in
-                 await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, targetUser.username, { expirationTtl: 86400 });
-                 await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
-                 
-                 // Return user info (no sensitive data)
-                 // FIX: Default to 'admin' if role is missing (legacy support)
-                 return jsonResponse({ 
-                     token,
-                     user: {
-                         username: targetUser.username,
-                         role: targetUser.role || 'admin', 
-                         permissions: targetUser.permissions || ['all']
-                     }
-                 });
-             }
+    if (targetUser) {
+        const inputHashObj = await hashPassword(body.password || '', hex2buf(targetUser.salt));
+        if (inputHashObj.hash === targetUser.passwordHash) {
+            const token = crypto.randomUUID();
+            // Store session in KV with TTL
+            await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, targetUser.username, { expirationTtl: 86400 });
+            await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
+            
+            return jsonResponse({ 
+                token,
+                user: {
+                    username: targetUser.username,
+                    role: targetUser.role || 'admin', 
+                    permissions: JSON.parse(targetUser.permissions || '[]')
+                }
+            });
         }
     } 
 
@@ -316,14 +350,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           return errorResponse('Permission denied', 403);
       }
 
-      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[] || [];
-
       // GET Users List
       if (request.method === 'GET') {
-          const safeUsers = users.map(u => ({
+          const results = await env.DB.prepare('SELECT username, role, permissions, createdAt FROM users').all<DBUser>();
+          const safeUsers = results.results.map(u => ({
               username: u.username,
               role: u.role || 'admin',
-              permissions: u.permissions || ['all'],
+              permissions: JSON.parse(u.permissions || '[]'),
               createdAt: u.createdAt
           }));
           return jsonResponse(safeUsers);
@@ -334,24 +367,27 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const body: any = await request.json();
           if (!body.username || !body.password) return errorResponse("Missing fields");
 
-          if (users.find(u => u.username === body.username)) {
-              return errorResponse("Username exists", 400);
+          try {
+            const { hash, salt } = await hashPassword(body.password);
+            
+            await env.DB.prepare(
+                'INSERT INTO users (username, passwordHash, salt, createdAt, role, permissions) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(
+                body.username,
+                hash,
+                salt,
+                Date.now(),
+                'editor',
+                JSON.stringify(body.permissions || [])
+            ).run();
+            
+            return jsonResponse({ success: true });
+          } catch (e: any) {
+             if (e.message && e.message.includes('UNIQUE')) {
+                 return errorResponse("Username exists", 400);
+             }
+             return errorResponse("Creation failed", 500);
           }
-
-          const { hash, salt } = await hashPassword(body.password);
-          
-          const newUser: User = {
-              username: body.username,
-              passwordHash: hash,
-              salt: salt,
-              createdAt: Date.now(),
-              role: 'editor',
-              permissions: body.permissions || [] 
-          };
-
-          users.push(newUser);
-          await env.BLOG_KV.put(USERS_KEY, JSON.stringify(users));
-          return jsonResponse({ success: true });
       }
 
       // DELETE User
@@ -360,17 +396,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (!targetUsername) return errorResponse("Missing username");
           if (targetUsername === currentUser.username) return errorResponse("Cannot delete yourself");
 
-          const targetUser = users.find(u => u.username === targetUsername);
-          const targetUserRole = targetUser?.role || 'admin'; 
+          const targetUser = await env.DB.prepare('SELECT role FROM users WHERE username = ?').bind(targetUsername).first<{role: string}>();
           
-          const adminCount = users.filter(u => (u.role || 'admin') === 'admin').length;
+          if (!targetUser) return errorResponse("User not found");
 
-          if (targetUserRole === 'admin' && adminCount <= 1) {
+          // Count Admins to prevent locking out
+          const adminCountResult = await env.DB.prepare("SELECT count(*) as count FROM users WHERE role = 'admin'").first<{count: number}>();
+          const adminCount = adminCountResult?.count || 0;
+
+          if (targetUser.role === 'admin' && adminCount <= 1) {
              return errorResponse("Cannot delete the only admin");
           }
 
-          const newUsers = users.filter(u => u.username !== targetUsername);
-          await env.BLOG_KV.put(USERS_KEY, JSON.stringify(newUsers));
+          await env.DB.prepare('DELETE FROM users WHERE username = ?').bind(targetUsername).run();
           return jsonResponse({ success: true });
       }
   }
@@ -378,58 +416,93 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // 6. Posts Management
   if (path.startsWith('posts')) {
     const currentUser = await getAuthenticatedUser();
-    // For GET operations (public), we don't strictly need a user, unless viewing drafts
 
     if (request.method === 'GET') {
       const id = url.searchParams.get('id');
 
+      // --- GET SINGLE POST ---
       if (id) {
-        const postData = await env.BLOG_KV.get(`post:${id}`, 'json');
-        if (!postData) return errorResponse('Post not found', 404);
+        // Fetch post
+        const post = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<DBPost>();
         
-        const fullPost: any = postData;
+        if (!post) return errorResponse('Post not found', 404);
 
         // Draft Protection
-        if (fullPost.status === 'draft') {
+        if (post.status === 'draft') {
             if (!currentUser) return errorResponse('Unauthorized: Draft', 403);
         }
         
-        const metaList = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
-        const idx = metaList.findIndex(p => p.id === id);
-        if (idx !== -1) {
-             metaList[idx].views = (metaList[idx].views || 0) + 1;
-             await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(metaList));
-             fullPost.views = metaList[idx].views;
-             await env.BLOG_KV.put(`post:${id}`, JSON.stringify(fullPost));
-             return jsonResponse(fullPost, 200, 0); 
-        }
-        return jsonResponse(postData, 200, 60);
-      } else {
-        // ... Pagination & Filtering ...
+        // Increment Views (Atomic Update)
+        context.waitUntil(
+            env.DB.prepare('UPDATE posts SET views = views + 1 WHERE id = ?').bind(id).run()
+        );
+
+        // Format for frontend
+        const formattedPost = {
+            ...post,
+            tags: JSON.parse(post.tags || '[]'),
+            // optimistic view update for response
+            views: post.views + 1
+        };
+
+        return jsonResponse(formattedPost, 200, 0); 
+      } 
+      
+      // --- GET POSTS LIST (Pagination & Filtering) ---
+      else {
         const page = parseInt(url.searchParams.get('page') || '1');
         const limit = parseInt(url.searchParams.get('limit') || '10');
         const search = (url.searchParams.get('search') || '').toLowerCase();
         const category = url.searchParams.get('category');
         const tag = url.searchParams.get('tag');
         
-        let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
+        const offset = (page - 1) * limit;
         
+        let query = 'SELECT id, title, excerpt, tags, category, createdAt, views, url, status FROM posts WHERE 1=1';
+        const params: any[] = [];
+
+        // Auth Filter: Admin sees all, Public sees only published
         if (!currentUser) {
-            list = list.filter(p => p.status !== 'draft');
+            query += " AND status = 'published'";
         }
-        // ... filtering logic ...
-        if (search) list = list.filter(p => p.title.toLowerCase().includes(search) || p.excerpt.toLowerCase().includes(search));
-        if (category) list = list.filter(p => p.category === category);
-        if (tag) list = list.filter(p => p.tags && p.tags.includes(tag));
+
+        if (category) {
+            query += " AND category = ?";
+            params.push(category);
+        }
+
+        if (tag) {
+            // Simplistic LIKE query for JSON string tags. 
+            // Better solution: a separate tags table, but LIKE is okay for small scale.
+            query += " AND tags LIKE ?";
+            params.push(`%${tag}%`);
+        }
+
+        if (search) {
+            query += " AND (lower(title) LIKE ? OR lower(excerpt) LIKE ?)";
+            params.push(`%${search}%`);
+            params.push(`%${search}%`);
+        }
+
+        // Count Total
+        const countQuery = query.replace('SELECT id, title, excerpt, tags, category, createdAt, views, url, status', 'SELECT count(*) as total');
+        const totalResult = await env.DB.prepare(countQuery).bind(...params).first<{total: number}>();
+        const total = totalResult?.total || 0;
+
+        // Fetch Data
+        query += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
+        params.push(limit);
+        params.push(offset);
+
+        const results = await env.DB.prepare(query).bind(...params).all<DBPost>();
         
-        list.sort((a, b) => b.createdAt - a.createdAt);
-        const total = list.length;
-        const start = (page - 1) * limit;
-        const end = start + limit;
-        const pagedList = list.slice(start, end);
+        const list = results.results.map(p => ({
+            ...p,
+            tags: JSON.parse(p.tags || '[]')
+        }));
 
         const cacheTime = currentUser ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
-        return jsonResponse({ list: pagedList, total, page, limit }, 200, cacheTime); 
+        return jsonResponse({ list, total, page, limit }, 200, cacheTime); 
       }
     }
 
@@ -440,64 +513,55 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const body: any = await request.json();
       if (!body.title) return errorResponse('Missing title');
 
-      // Check if post exists to determine if it's CREATE or UPDATE
-      // NOTE: Frontend usually sends a fresh UUID for new posts, so this check works.
-      // If client sends an ID that exists in KV, it's an update.
-      let existingPost = null;
-      if (body.id) {
-          existingPost = await env.BLOG_KV.get(`post:${body.id}`);
-      }
+      const id = body.id || crypto.randomUUID();
+      const createdAt = body.createdAt || Date.now();
+      const status = body.status || 'draft';
+      const tagsString = JSON.stringify(body.tags || []);
+
+      // Check permissions logic similar to KV version
+      const existingPost = await env.DB.prepare('SELECT id FROM posts WHERE id = ?').bind(id).first();
 
       if (existingPost) {
-          // UPDATE: STRICT ADMIN ONLY
-          if (currentUser.role !== 'admin') {
+           if (currentUser.role !== 'admin') {
               return errorResponse('Permission denied: Only Main Admin can edit existing articles.', 403);
           }
       } else {
-          // CREATE: Admin OR manage_contents permission
           if (currentUser.role !== 'admin' && !hasPermission(currentUser, 'manage_contents')) {
               return errorResponse('Permission denied: You cannot create articles.', 403);
           }
-          // Ensure ID is set for new post if not provided (though Admin.tsx provides it)
-          if (!body.id) body.id = crypto.randomUUID();
       }
 
-      if (!body.createdAt) body.createdAt = Date.now();
-      if (!body.status) body.status = 'draft'; 
+      await env.DB.prepare(`
+        INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            excerpt = excluded.excerpt,
+            content = excluded.content,
+            tags = excluded.tags,
+            category = excluded.category,
+            url = excluded.url,
+            status = excluded.status
+      `).bind(
+        id,
+        body.title,
+        body.excerpt || '',
+        body.content || '',
+        tagsString,
+        body.category || 'Uncategorized',
+        createdAt,
+        body.views || 0,
+        body.url || '',
+        status
+      ).run();
 
-      await env.BLOG_KV.put(`post:${body.id}`, JSON.stringify(body));
-
-      let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
-      const metaIndex = list.findIndex(p => p.id === body.id);
-      
-      const newMeta: PostMetadata = {
-        id: body.id,
-        title: body.title,
-        excerpt: body.excerpt || '',
-        tags: body.tags || [],
-        category: body.category || 'Uncategorized',
-        createdAt: body.createdAt,
-        views: body.views || 0,
-        url: body.url || '',
-        status: body.status
-      };
-
-      if (metaIndex >= 0) {
-        newMeta.views = list[metaIndex].views; 
-        list[metaIndex] = newMeta;
-      } else {
-        list.unshift(newMeta); 
-      }
-
-      await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(list));
-      return jsonResponse({ id: body.id });
+      return jsonResponse({ id });
     }
 
     // DELETE (Protected - Write)
     if (request.method === 'DELETE') {
       if (!currentUser) return errorResponse('Unauthorized', 401);
       
-      // DELETE: STRICT ADMIN ONLY
       if (currentUser.role !== 'admin') {
           return errorResponse('Permission denied: Only Main Admin can delete articles.', 403);
       }
@@ -505,11 +569,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const id = url.searchParams.get('id');
       if (!id) return errorResponse('Missing ID');
 
-      await env.BLOG_KV.delete(`post:${id}`);
-
-      let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
-      list = list.filter(p => p.id !== id);
-      await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(list));
+      await env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id).run();
 
       return jsonResponse({ deleted: true });
     }
