@@ -5,9 +5,9 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Helmet } from 'react-helmet-async';
-import { BlogPost, SiteConfig } from '../types';
+import { BlogPost, PostMetadata, SiteConfig } from '../types';
 import { api } from '../services/api';
-import { ArrowLeft, Calendar, Tag, User, Loader2, Link as LinkIcon, ExternalLink, Clock, FileText, List, Share2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Tag, User, Loader2, Link as LinkIcon, ExternalLink, Clock, FileText, List, Share2, Sparkles, ArrowRight } from 'lucide-react';
 import { Comments } from '../components/Comments';
 
 // 辅助函数：计算阅读时间和字数
@@ -38,6 +38,7 @@ export const PostDetail: React.FC = () => {
   // 获取 Layout 传递下来的 context (包含 theme)
   const context = useOutletContext<{ theme: 'light' | 'dark' }>(); 
   const [post, setPost] = useState<BlogPost | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<PostMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [stats, setStats] = useState({ wordCount: 0, readingTime: 0 });
@@ -48,19 +49,49 @@ export const PostDetail: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
-    const fetchPost = async () => {
+    
+    const fetchData = async () => {
       try {
+        setLoading(true);
+        // 1. 获取当前文章详情
         const data = await api.getPost(id);
         setPost(data);
         setStats(calculateReadingStats(data.content));
         setHeadings(extractHeadings(data.content));
+
+        // 2. 获取所有文章以计算相关推荐
+        // 注意：在生产环境中，如果文章数量巨大，建议后端实现此逻辑。
+        // 对于个人博客，前端过滤即可。
+        const allPosts = await api.getPosts();
+        
+        const related = allPosts
+            .filter(p => p.id !== data.id) // 排除当前文章
+            .map(p => {
+                let score = 0;
+                // 同分类 +3分
+                if (p.category === data.category) score += 3;
+                // 相同标签 +1分/个
+                const sharedTags = p.tags.filter(t => data.tags.includes(t)).length;
+                score += sharedTags;
+                return { post: p, score };
+            })
+            .filter(item => item.score > 0) // 过滤掉完全不相关的
+            .sort((a, b) => b.score - a.score || b.post.createdAt - a.post.createdAt) // 按分数排序，分数相同按时间
+            .slice(0, 3) // 取前3个
+            .map(item => item.post);
+
+        setRelatedPosts(related);
+
       } catch (err) {
         setError('文章不存在或加载失败');
       } finally {
         setLoading(false);
       }
     };
-    fetchPost();
+
+    fetchData();
+    // 滚动到顶部
+    window.scrollTo(0, 0);
   }, [id]);
 
   const handleShare = async () => {
@@ -224,6 +255,35 @@ export const PostDetail: React.FC = () => {
                         </ReactMarkdown>
                     </div>
                 </div>
+
+                {/* Related Posts Section */}
+                {relatedPosts.length > 0 && (
+                    <div className="mt-12 w-full animate-fade-in">
+                         <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                            <Sparkles size={20} className="text-yellow-500" /> 相关推荐
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {relatedPosts.map(relPost => (
+                                <Link 
+                                    key={relPost.id} 
+                                    to={`/post/${relPost.id}`}
+                                    className="bg-glass backdrop-blur-md border border-glassBorder rounded-2xl p-5 hover:bg-white/60 dark:hover:bg-white/10 transition-all duration-300 group flex flex-col h-full"
+                                >
+                                    <div className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-2">
+                                        {relPost.category}
+                                    </div>
+                                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
+                                        {relPost.title}
+                                    </h4>
+                                    <div className="mt-auto flex items-center justify-between text-xs text-slate-500">
+                                        <span>{new Date(relPost.createdAt).toLocaleDateString()}</span>
+                                        <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 评论区 */}
                 <Comments theme={context?.theme || 'light'} />
