@@ -139,6 +139,16 @@ export const api = {
       if (!json.success) throw new Error(json.error);
   },
 
+  async updateUser(username: string, permissions: string[]): Promise<void> {
+      const res = await fetch(`${API_BASE}/users`, {
+          method: 'PATCH',
+          headers: getHeaders(),
+          body: JSON.stringify({ username, permissions })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+  },
+
   async deleteUser(username: string): Promise<void> {
       const res = await fetch(`${API_BASE}/users?username=${username}`, {
           method: 'DELETE',

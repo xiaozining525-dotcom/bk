@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { BlogPost, PostMetadata, UserProfile } from '../types';
 import { CATEGORIES } from '../constants';
-import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X, Lock } from 'lucide-react';
+import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X, Lock, Check } from 'lucide-react';
 
 export const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'posts' | 'users'>('posts');
@@ -18,6 +18,9 @@ export const Admin: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', permissions: [] as string[] });
+  
+  // Editing User Permissions State
+  const [editingUserPerms, setEditingUserPerms] = useState<{username: string, permissions: string[]} | null>(null);
 
   const emptyPost: Partial<BlogPost> = {
     title: '',
@@ -169,6 +172,40 @@ export const Admin: React.FC = () => {
       });
   };
 
+  // --- Edit User Permissions Handlers ---
+  
+  const openEditUserModal = (user: UserProfile) => {
+      setEditingUserPerms({
+          username: user.username,
+          permissions: [...user.permissions]
+      });
+  };
+
+  const toggleEditPermission = (perm: string) => {
+      if (!editingUserPerms) return;
+      setEditingUserPerms(prev => {
+          if (!prev) return null;
+          const exists = prev.permissions.includes(perm);
+          if (exists) return { ...prev, permissions: prev.permissions.filter(p => p !== perm) };
+          return { ...prev, permissions: [...prev.permissions, perm] };
+      });
+  };
+
+  const saveUserPermissions = async () => {
+      if (!editingUserPerms) return;
+      try {
+          setMessage('更新权限中...');
+          await api.updateUser(editingUserPerms.username, editingUserPerms.permissions);
+          setMessage('权限更新成功');
+          setEditingUserPerms(null);
+          loadUsers();
+          setTimeout(() => setMessage(''), 2000);
+      } catch (e: any) {
+          alert(e.message || '更新失败');
+          setMessage('');
+      }
+  };
+
   // --- Drag and Drop Handlers ---
   const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
@@ -205,7 +242,7 @@ export const Admin: React.FC = () => {
   };
 
   return (
-    <div className="bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh]">
+    <div className="bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh] relative">
       
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -514,14 +551,26 @@ export const Admin: React.FC = () => {
                                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
                                     </td>
                                     <td className="py-3 px-2 text-right">
-                                        {u.role !== 'admin' && u.username !== currentUser?.username && (
-                                            <button 
-                                                onClick={() => handleDeleteUser(u.username)}
-                                                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                                                title="删除用户"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                        {u.role !== 'admin' && (
+                                            <div className="flex justify-end gap-2">
+                                                 <button 
+                                                    onClick={() => openEditUserModal(u)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                                                    title="修改权限"
+                                                >
+                                                    <Edit3 size={16} />
+                                                </button>
+                                                
+                                                {u.username !== currentUser?.username && (
+                                                    <button 
+                                                        onClick={() => handleDeleteUser(u.username)}
+                                                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                                        title="删除用户"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </td>
                                 </tr>
@@ -531,6 +580,89 @@ export const Admin: React.FC = () => {
                 </div>
             )}
           </>
+      )}
+
+      {/* --- Edit User Permissions Modal --- */}
+      {editingUserPerms && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/20">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold dark:text-white">修改权限: {editingUserPerms.username}</h3>
+                      <button onClick={() => setEditingUserPerms(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full dark:text-slate-400">
+                          <X size={20} />
+                      </button>
+                  </div>
+
+                  <div className="space-y-3 mb-8">
+                      <label 
+                        className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                            editingUserPerms.permissions.includes('manage_contents') 
+                            ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
+                            : 'bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
+                        }`}
+                      >
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                              editingUserPerms.permissions.includes('manage_contents') 
+                              ? 'bg-blue-600 border-blue-600 text-white' 
+                              : 'bg-white border-slate-300'
+                          }`}>
+                              {editingUserPerms.permissions.includes('manage_contents') && <Check size={12} />}
+                          </div>
+                          <input 
+                              type="checkbox" 
+                              className="hidden"
+                              checked={editingUserPerms.permissions.includes('manage_contents')}
+                              onChange={() => toggleEditPermission('manage_contents')}
+                          />
+                          <div>
+                              <div className="font-bold text-sm dark:text-slate-200">内容管理</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">允许创建新文章、查看列表</div>
+                          </div>
+                      </label>
+
+                      <label 
+                        className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                            editingUserPerms.permissions.includes('manage_users') 
+                            ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
+                            : 'bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
+                        }`}
+                      >
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                              editingUserPerms.permissions.includes('manage_users') 
+                              ? 'bg-blue-600 border-blue-600 text-white' 
+                              : 'bg-white border-slate-300'
+                          }`}>
+                              {editingUserPerms.permissions.includes('manage_users') && <Check size={12} />}
+                          </div>
+                          <input 
+                              type="checkbox" 
+                              className="hidden"
+                              checked={editingUserPerms.permissions.includes('manage_users')}
+                              onChange={() => toggleEditPermission('manage_users')}
+                          />
+                          <div>
+                              <div className="font-bold text-sm dark:text-slate-200">账号管理</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">允许增加、删除子账号</div>
+                          </div>
+                      </label>
+                  </div>
+
+                  <div className="flex gap-3">
+                      <button 
+                        onClick={() => setEditingUserPerms(null)} 
+                        className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition"
+                      >
+                          取消
+                      </button>
+                      <button 
+                        onClick={saveUserPermissions} 
+                        className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition shadow-lg shadow-blue-600/20"
+                      >
+                          保存更改
+                      </button>
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );

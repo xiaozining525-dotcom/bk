@@ -107,7 +107,7 @@ interface User {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -387,6 +387,33 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                  return errorResponse("Username exists", 400);
              }
              return errorResponse("Creation failed", 500);
+          }
+      }
+
+      // PATCH Update User Permissions
+      if (request.method === 'PATCH') {
+          const body: any = await request.json();
+          if (!body.username || !Array.isArray(body.permissions)) {
+              return errorResponse("Missing username or invalid permissions");
+          }
+
+          const targetUser = await env.DB.prepare('SELECT role FROM users WHERE username = ?').bind(body.username).first<{role: string}>();
+          if (!targetUser) return errorResponse("User not found", 404);
+
+          // Prevent modifying Main Admin (role=admin) permissions if they are the last admin, or generally for safety
+          if (targetUser.role === 'admin' && currentUser.username !== body.username) {
+              // Optional: decide if admins can modify other admins. For now, let's allow it but maybe restrict if needed.
+              // Assuming 'admin' role always implies full permissions, updating permissions for an 'admin' role user 
+              // might be redundant but harmless unless we remove 'all'.
+          }
+
+          try {
+              await env.DB.prepare('UPDATE users SET permissions = ? WHERE username = ?')
+                  .bind(JSON.stringify(body.permissions), body.username)
+                  .run();
+              return jsonResponse({ success: true });
+          } catch (e) {
+              return errorResponse("Update failed", 500);
           }
       }
 
