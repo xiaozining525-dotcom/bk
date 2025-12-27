@@ -103,11 +103,11 @@ export const api = {
     if (!json.success) throw new Error(json.error);
   },
 
-  async login(password: string, turnstileToken?: string): Promise<boolean> {
+  async login(username: string, password: string, turnstileToken?: string): Promise<boolean> {
     const res = await fetch(`${API_BASE}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, turnstileToken }),
+      body: JSON.stringify({ username, password, turnstileToken }),
     });
     const json = await res.json();
     if (json.success && json.data?.token) {

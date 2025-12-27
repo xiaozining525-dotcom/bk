@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Lock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Lock, User, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -14,6 +14,7 @@ declare global {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,12 +100,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     
     try {
-      const success = await api.login(password, token);
+      const success = await api.login(username, password, token);
       if (success) {
         onLoginSuccess();
         navigate('/admin');
       } else {
-        setError('密码错误或验证过期');
+        setError('用户名、密码错误或验证过期');
         // Reset widget on failure
         if (window.turnstile && widgetId.current) {
             window.turnstile.reset(widgetId.current);
@@ -119,7 +120,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="flex justify-center items-center h-[60vh]">
+    <div className="flex justify-center items-center h-[65vh]">
       <div className="bg-glass backdrop-blur-xl border border-glassBorder p-10 rounded-3xl shadow-xl w-full max-w-sm">
         <div className="flex justify-center mb-6">
             <div className="p-4 bg-white/20 rounded-full text-slate-700 dark:text-slate-200">
@@ -127,15 +128,26 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </div>
         </div>
         <h2 className="text-2xl font-bold text-center text-slate-800 dark:text-white mb-8">管理员登录</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
+             <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="用户名"
+              className="w-full pl-12 pr-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all dark:text-white placeholder-slate-500"
+              autoFocus
+            />
+          </div>
+          <div className="relative">
+             <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              className="w-full px-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-center tracking-widest transition-all dark:text-white"
-              autoFocus
+              placeholder="密码"
+              className="w-full pl-12 pr-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 tracking-widest transition-all dark:text-white placeholder-slate-500"
             />
           </div>
           

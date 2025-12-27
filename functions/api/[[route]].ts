@@ -253,7 +253,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return errorResponse('Too many login attempts. Please try again in 15 minutes.', 429);
     }
 
-    const body: { password?: string; turnstileToken?: string } = await request.json();
+    const body: { username?: string; password?: string; turnstileToken?: string } = await request.json();
 
     if (!await verifyTurnstile(body.turnstileToken, ip)) {
         return errorResponse('Captcha validation failed', 400);
@@ -264,18 +264,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     
     // Check 1: KV Users exist?
     if (users && users.length > 0) {
-        // Authenticate against the first user (Admin)
-        const admin = users[0];
-        const inputHashObj = await hashPassword(body.password || '', hex2buf(admin.salt));
+        // Find user by username
+        const targetUser = users.find(u => u.username === body.username);
         
-        if (inputHashObj.hash === admin.passwordHash) {
-             const token = crypto.randomUUID();
-             await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
-             await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
-             return jsonResponse({ token });
+        if (targetUser) {
+             const inputHashObj = await hashPassword(body.password || '', hex2buf(targetUser.salt));
+             if (inputHashObj.hash === targetUser.passwordHash) {
+                 const token = crypto.randomUUID();
+                 await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
+                 await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
+                 return jsonResponse({ token });
+             }
         }
     } 
-    // Check 2: Fallback to LEGACY env variable if no KV users yet (so existing deployments don't break immediately)
+    // Check 2: Fallback to LEGACY env variable if no KV users yet
     else if (process.env.ADMIN_PASSWORD && body.password === process.env.ADMIN_PASSWORD) {
          const token = crypto.randomUUID();
          await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
