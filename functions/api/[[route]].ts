@@ -74,6 +74,7 @@ interface DBPost {
   views: number;
   url: string;
   status: 'published' | 'draft';
+  isPinned?: number; // 0 or 1
 }
 
 interface DBUser {
@@ -96,6 +97,7 @@ interface PostMetadata {
   views: number;
   url?: string;
   status: 'published' | 'draft';
+  isPinned: boolean;
 }
 
 interface User {
@@ -513,7 +515,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             ...post,
             tags: JSON.parse(post.tags || '[]'),
             // optimistic view update for response
-            views: post.views + 1
+            views: post.views + 1,
+            isPinned: !!post.isPinned // Convert 0/1 to boolean
         };
 
         return jsonResponse(formattedPost, 200, 0); 
@@ -529,7 +532,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         
         const offset = (page - 1) * limit;
         
-        let query = 'SELECT id, title, excerpt, tags, category, createdAt, views, url, status FROM posts WHERE 1=1';
+        // Added isPinned to SELECT
+        let query = 'SELECT id, title, excerpt, tags, category, createdAt, views, url, status, isPinned FROM posts WHERE 1=1';
         const params: any[] = [];
 
         // Auth Filter: Admin sees all, Public sees only published
@@ -556,12 +560,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
 
         // Count Total
-        const countQuery = query.replace('SELECT id, title, excerpt, tags, category, createdAt, views, url, status', 'SELECT count(*) as total');
+        const countQuery = query.replace('SELECT id, title, excerpt, tags, category, createdAt, views, url, status, isPinned', 'SELECT count(*) as total');
         const totalResult = await env.DB.prepare(countQuery).bind(...params).first<{total: number}>();
         const total = totalResult?.total || 0;
 
-        // Fetch Data
-        query += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
+        // Fetch Data - Updated SORT ORDER to prioritize pinned posts
+        query += " ORDER BY isPinned DESC, createdAt DESC LIMIT ? OFFSET ?";
         params.push(limit);
         params.push(offset);
 
@@ -569,7 +573,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         
         const list = results.results.map(p => ({
             ...p,
-            tags: JSON.parse(p.tags || '[]')
+            tags: JSON.parse(p.tags || '[]'),
+            isPinned: !!p.isPinned // Convert 0/1 to boolean
         }));
 
         const cacheTime = currentUser ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
@@ -588,6 +593,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const createdAt = body.createdAt || Date.now();
       const status = body.status || 'draft';
       const tagsString = JSON.stringify(body.tags || []);
+      const isPinned = body.isPinned ? 1 : 0; // Convert boolean to 0/1
 
       // Check permissions logic similar to KV version
       const existingPost = await env.DB.prepare('SELECT id FROM posts WHERE id = ?').bind(id).first();
@@ -603,8 +609,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
 
       await env.DB.prepare(`
-        INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status, isPinned)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             excerpt = excluded.excerpt,
@@ -612,7 +618,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             tags = excluded.tags,
             category = excluded.category,
             url = excluded.url,
-            status = excluded.status
+            status = excluded.status,
+            isPinned = excluded.isPinned
       `).bind(
         id,
         body.title,
@@ -623,7 +630,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         createdAt,
         body.views || 0,
         body.url || '',
-        status
+        status,
+        isPinned
       ).run();
 
       return jsonResponse({ id });

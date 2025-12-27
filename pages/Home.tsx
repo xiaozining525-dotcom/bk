@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { PostMetadata } from '../types';
 import { api } from '../services/api';
-import { Clock, Tag, Eye, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Clock, Tag, Eye, ChevronRight, AlertCircle, Loader2, Pin } from 'lucide-react';
 
 export const Home: React.FC = () => {
   const [posts, setPosts] = useState<PostMetadata[]>([]);
@@ -93,12 +93,19 @@ export const Home: React.FC = () => {
             <Link 
               key={post.id} 
               to={`/post/${post.id}`}
-              className="group block relative bg-glass backdrop-blur-md rounded-2xl p-6 border border-glassBorder hover:bg-white/70 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col h-full"
+              className={`group block relative bg-glass backdrop-blur-md rounded-2xl p-6 border border-glassBorder hover:bg-white/70 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col h-full ${post.isPinned ? 'ring-2 ring-blue-400/30' : ''}`}
             >
               <div className="flex justify-between items-start mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 px-2 py-1 rounded-md">
-                  {post.category}
-                </span>
+                <div className="flex gap-2">
+                    {post.isPinned && (
+                        <span className="text-xs font-bold uppercase tracking-wider text-white bg-blue-500 px-2 py-1 rounded-md flex items-center gap-1">
+                            <Pin size={10} fill="currentColor" /> 置顶
+                        </span>
+                    )}
+                    <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 px-2 py-1 rounded-md">
+                    {post.category}
+                    </span>
+                </div>
                 <div className="flex items-center text-slate-400 text-xs gap-3">
                   <span className="flex items-center gap-1"><Clock size={12} /> {new Date(post.createdAt).toLocaleDateString()}</span>
                   <span className="flex items-center gap-1"><Eye size={12} /> {post.views}</span>

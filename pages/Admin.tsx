@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'; // Import Portal
 import { api } from '../services/api';
 import { BlogPost, PostMetadata, UserProfile } from '../types';
 import { CATEGORIES } from '../constants';
-import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X, Lock, Check } from 'lucide-react';
+import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X, Lock, Check, Pin, PinOff } from 'lucide-react';
 
 export const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'posts' | 'users'>('posts');
@@ -46,6 +46,7 @@ export const Admin: React.FC = () => {
     url: '',
     id: '',
     status: 'draft',
+    isPinned: false, // Default unpinned
     createdAt: Date.now()
   };
 
@@ -137,6 +138,30 @@ export const Admin: React.FC = () => {
     } catch (e: any) {
       alert(e.message || '删除失败');
     }
+  };
+
+  const handleTogglePin = async (post: PostMetadata) => {
+      // Toggle the pin status
+      const updatedPost: BlogPost = {
+          ...post,
+          content: '', // Content not needed for update but interface requires it. API handles metadata update.
+          // Fetch the full post first to preserve content if we want to be safe, 
+          // OR the backend API needs to support partial updates.
+          // For simplicity and safety with current API:
+      } as any;
+
+      try {
+          // We need the full post content to save it back because our API is a "save whole post" endpoint
+          // Optimization: Create a specific endpoint for pinning or fetch full post first
+          const fullPost = await api.getPost(post.id);
+          await api.createOrUpdatePost({
+              ...fullPost,
+              isPinned: !post.isPinned
+          });
+          loadPosts(); // Reload list to see reordering
+      } catch (e) {
+          alert("操作失败");
+      }
   };
 
   const handleEditPost = async (id: string) => {
@@ -342,6 +367,23 @@ export const Admin: React.FC = () => {
                     </div>
                 </div>
                 
+                {/* Pin Toggle in Editor */}
+                <div className="flex items-center gap-3 p-3 bg-white/30 dark:bg-white/5 rounded-xl border border-white/30 dark:border-white/10">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                            type="checkbox" 
+                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            checked={!!editingPost.isPinned}
+                            onChange={e => setEditingPost({...editingPost, isPinned: e.target.checked})}
+                        />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            {editingPost.isPinned ? <Pin size={16} className="text-blue-500" /> : <PinOff size={16} />}
+                            置顶文章
+                        </span>
+                    </label>
+                    <span className="text-xs text-slate-500">（置顶文章将显示在首页最上方）</span>
+                </div>
+                
                 <input
                     type="text"
                     placeholder="相关链接 (URL) - 可选"
@@ -416,6 +458,7 @@ export const Admin: React.FC = () => {
                     <thead>
                     <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
                         <th className="py-3 px-2">状态</th>
+                        <th className="py-3 px-2">置顶</th>
                         <th className="py-3 px-2">标题</th>
                         <th className="py-3 px-2">分类</th>
                         <th className="py-3 px-2">发布时间</th>
@@ -435,6 +478,19 @@ export const Admin: React.FC = () => {
                                     <FileText size={10} className="mr-1"/> 草稿
                                 </span>
                             )}
+                        </td>
+                        <td className="py-3 px-2">
+                            {/* Pin Toggle Button */}
+                            {isAdmin && (
+                                <button 
+                                    onClick={() => handleTogglePin(post)}
+                                    className={`p-1.5 rounded-lg transition-colors ${post.isPinned ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                                    title={post.isPinned ? "取消置顶" : "置顶文章"}
+                                >
+                                    {post.isPinned ? <Pin size={16} fill="currentColor" /> : <Pin size={16} />}
+                                </button>
+                            )}
+                            {!isAdmin && post.isPinned && <Pin size={16} className="text-blue-500" fill="currentColor" />}
                         </td>
                         <td className="py-3 px-2 font-medium text-slate-800 dark:text-slate-200">
                             <div className="flex flex-col">

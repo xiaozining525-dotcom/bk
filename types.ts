@@ -9,6 +9,7 @@ export interface BlogPost {
   views: number;
   url?: string;
   status: 'published' | 'draft'; // Added status
+  isPinned?: boolean; // Added pinned status
 }
 
 export interface PostMetadata {
@@ -21,6 +22,7 @@ export interface PostMetadata {
   views: number;
   url?: string;
   status: 'published' | 'draft'; // Added status
+  isPinned?: boolean; // Added pinned status
 }
 
 export interface PaginatedResponse<T> {
