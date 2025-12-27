@@ -164,10 +164,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (username === 'valid') {
         // Fallback for legacy admin
-        return users.find(u => u.role === 'admin') || null;
+        // Legacy admins might not have 'role' property set in KV, default to admin.
+        const found = users.find(u => u.role === 'admin' || !u.role);
+        return found ? { ...found, role: 'admin', permissions: ['all'] } : null;
     }
 
-    return users.find(u => u.username === username) || null;
+    const found = users.find(u => u.username === username);
+    if (found && !found.role) {
+        // Legacy user without role => Admin
+        return { ...found, role: 'admin', permissions: ['all'] };
+    }
+    return found || null;
   };
 
   const checkRateLimit = async (ip: string): Promise<boolean> => {
@@ -288,12 +295,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                  await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
                  
                  // Return user info (no sensitive data)
+                 // FIX: Default to 'admin' if role is missing (legacy support)
                  return jsonResponse({ 
                      token,
                      user: {
                          username: targetUser.username,
-                         role: targetUser.role || 'editor',
-                         permissions: targetUser.permissions || []
+                         role: targetUser.role || 'admin', 
+                         permissions: targetUser.permissions || ['all']
                      }
                  });
              }
@@ -320,8 +328,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           // Return list without password hashes/salts
           const safeUsers = users.map(u => ({
               username: u.username,
-              role: u.role || 'editor',
-              permissions: u.permissions || [],
+              // FIX: Default to 'admin' if role is missing
+              role: u.role || 'admin',
+              permissions: u.permissions || ['all'],
               createdAt: u.createdAt
           }));
           return jsonResponse(safeUsers);
@@ -359,7 +368,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (targetUsername === currentUser.username) return errorResponse("Cannot delete yourself");
 
           const targetUser = users.find(u => u.username === targetUsername);
-          if (targetUser?.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1) {
+          // Check role safely
+          const targetUserRole = targetUser?.role || 'admin'; 
+          
+          // Prevent deleting the last admin
+          // Count admins (treating missing role as admin)
+          const adminCount = users.filter(u => (u.role || 'admin') === 'admin').length;
+
+          if (targetUserRole === 'admin' && adminCount <= 1) {
              return errorResponse("Cannot delete the only admin");
           }
 

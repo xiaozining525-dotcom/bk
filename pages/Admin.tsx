@@ -39,9 +39,10 @@ export const Admin: React.FC = () => {
 
   const hasPermission = (perm: string) => {
       if (!currentUser) return false;
+      // Safety checks for legacy data or incomplete session info
       if (currentUser.role === 'admin') return true;
-      if (currentUser.permissions.includes('all')) return true;
-      return currentUser.permissions.includes(perm);
+      if (currentUser.permissions?.includes('all')) return true;
+      return currentUser.permissions?.includes(perm);
   };
 
   const loadPosts = async () => {

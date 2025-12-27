@@ -7,7 +7,7 @@ import { Admin } from './pages/Admin';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { About } from './pages/About';
-import { ADMIN_TOKEN_KEY } from './constants';
+import { ADMIN_TOKEN_KEY, USER_INFO_KEY } from './constants';
 import { api } from './services/api';
 import { SiteConfig } from './types';
 
@@ -67,6 +67,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
+    localStorage.removeItem(USER_INFO_KEY);
     setIsAuthenticated(false);
   };
 
