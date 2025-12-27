@@ -421,6 +421,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const targetUser = await env.DB.prepare('SELECT role FROM users WHERE username = ?').bind(body.username).first<{role: string}>();
           if (!targetUser) return errorResponse("User not found", 404);
 
+          // NEW RULE: Prevent users from modifying their own permissions
+          if (body.username === currentUser.username) {
+             return errorResponse("Permission denied: You cannot modify your own permissions.", 403);
+          }
+
           // Rule: Editors cannot modify Admins
           if (currentUser.role !== 'admin' && targetUser.role === 'admin') {
                return errorResponse("Permission denied: You cannot modify a Super Admin.", 403);

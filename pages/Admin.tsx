@@ -281,8 +281,8 @@ export const Admin: React.FC = () => {
   };
 
   return (
-    // Explicit background colors for light/dark mode transparency
-    <div className="bg-white/60 dark:bg-black/60 backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh] relative">
+    // Explicit background colors for light/dark mode transparency. Darkened to bg-slate-950/80 for better contrast.
+    <div className="bg-white/60 dark:bg-slate-950/80 backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh] relative">
       
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -345,13 +345,13 @@ export const Admin: React.FC = () => {
                     <input
                     type="text"
                     placeholder="文章标题"
-                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-300 outline-none dark:text-white"
+                    className="w-full p-3 bg-white/50 dark:bg-slate-900/50 border border-white/50 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-300 outline-none dark:text-white"
                     value={editingPost.title}
                     onChange={e => setEditingPost({...editingPost, title: e.target.value})}
                     />
                     <div className="flex gap-2">
                         <select
-                        className="flex-1 p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                        className="flex-1 p-3 bg-white/50 dark:bg-slate-900/50 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
                         value={editingPost.category}
                         onChange={e => setEditingPost({...editingPost, category: e.target.value})}
                         >
@@ -388,7 +388,7 @@ export const Admin: React.FC = () => {
                 <input
                     type="text"
                     placeholder="相关链接 (URL) - 可选"
-                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none font-mono text-sm text-slate-600 dark:text-slate-300"
+                    className="w-full p-3 bg-white/50 dark:bg-slate-900/50 border border-white/50 dark:border-white/10 rounded-xl outline-none font-mono text-sm text-slate-600 dark:text-slate-300"
                     value={editingPost.url || ''}
                     onChange={e => setEditingPost({...editingPost, url: e.target.value})}
                 />
@@ -396,7 +396,7 @@ export const Admin: React.FC = () => {
                 <input
                     type="text"
                     placeholder="摘要 (用于列表展示)"
-                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                    className="w-full p-3 bg-white/50 dark:bg-slate-900/50 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
                     value={editingPost.excerpt}
                     onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})}
                 />
@@ -404,7 +404,7 @@ export const Admin: React.FC = () => {
                 <input
                     type="text"
                     placeholder="标签 (逗号分隔)"
-                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                    className="w-full p-3 bg-white/50 dark:bg-slate-900/50 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
                     value={editingPost.tags?.join(',')}
                     onChange={e => setEditingPost({...editingPost, tags: e.target.value.split(',').map(t=>t.trim())})}
                 />
@@ -412,7 +412,7 @@ export const Admin: React.FC = () => {
                 <div className="relative">
                     <textarea
                     placeholder="Markdown 正文内容... (支持拖拽 .md/.txt 文件上传)"
-                    className={`w-full h-96 p-4 bg-white/50 dark:bg-black/30 border rounded-xl outline-none font-mono text-sm transition-all dark:text-slate-200 ${
+                    className={`w-full h-96 p-4 bg-white/50 dark:bg-slate-900/50 border rounded-xl outline-none font-mono text-sm transition-all dark:text-slate-200 ${
                         isDragging 
                         ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-blue-300' 
                         : 'border-white/50 dark:border-white/10'
@@ -457,7 +457,7 @@ export const Admin: React.FC = () => {
                 <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                    <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
+                    <tr className="text-slate-500 dark:text-slate-300 text-sm border-b border-slate-200/50 dark:border-white/10">
                         <th className="py-3 px-2">状态</th>
                         <th className="py-3 px-2">置顶</th>
                         <th className="py-3 px-2">标题</th>
@@ -541,7 +541,7 @@ export const Admin: React.FC = () => {
                             <label className="text-sm font-medium mb-1 block">用户名</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-black/30 border border-white/30 outline-none"
+                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-slate-900/50 border border-white/30 outline-none"
                                 value={newUser.username}
                                 onChange={e => setNewUser({...newUser, username: e.target.value})}
                                 required
@@ -551,7 +551,7 @@ export const Admin: React.FC = () => {
                             <label className="text-sm font-medium mb-1 block">密码</label>
                             <input 
                                 type="password" 
-                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-black/30 border border-white/30 outline-none"
+                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-slate-900/50 border border-white/30 outline-none"
                                 value={newUser.password}
                                 onChange={e => setNewUser({...newUser, password: e.target.value})}
                                 required
@@ -621,12 +621,16 @@ export const Admin: React.FC = () => {
 
                             {u.role !== 'admin' && (
                                 <div className="mt-2.5 flex gap-2">
-                                    <button 
-                                        onClick={() => openEditUserModal(u)}
-                                        className="flex-1 py-1 text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
-                                    >
-                                        修改权限
-                                    </button>
+                                    {/* Prevent self-edit in Mobile View */}
+                                    {u.username !== currentUser?.username && (
+                                        <button 
+                                            onClick={() => openEditUserModal(u)}
+                                            className="flex-1 py-1 text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
+                                        >
+                                            修改权限
+                                        </button>
+                                    )}
+                                    {/* Prevent self-delete in Mobile View */}
                                     {u.username !== currentUser?.username && (
                                         <button 
                                             onClick={() => handleDeleteUser(u.username)}
@@ -645,7 +649,7 @@ export const Admin: React.FC = () => {
                 <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
+                            <tr className="text-slate-500 dark:text-slate-300 text-sm border-b border-slate-200/50 dark:border-white/10">
                                 <th className="py-3 px-2">角色</th>
                                 <th className="py-3 px-2">用户名</th>
                                 <th className="py-3 px-2">权限</th>
@@ -673,14 +677,18 @@ export const Admin: React.FC = () => {
                                     <td className="py-3 px-2 text-right">
                                         {u.role !== 'admin' && (
                                             <div className="flex justify-end gap-2">
-                                                 <button 
-                                                    onClick={() => openEditUserModal(u)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
-                                                    title="修改权限"
-                                                >
-                                                    <Edit3 size={16} />
-                                                </button>
+                                                 {/* Prevent self-edit in Desktop View */}
+                                                 {u.username !== currentUser?.username && (
+                                                     <button 
+                                                        onClick={() => openEditUserModal(u)}
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                                                        title="修改权限"
+                                                    >
+                                                        <Edit3 size={16} />
+                                                    </button>
+                                                 )}
                                                 
+                                                {/* Prevent self-delete in Desktop View */}
                                                 {u.username !== currentUser?.username && (
                                                     <button 
                                                         onClick={() => handleDeleteUser(u.username)}

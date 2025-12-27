@@ -137,7 +137,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="用户名" 
               className="w-full pl-12 pr-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all dark:text-white placeholder-slate-500"
-              autoFocus
+              // Removed autoFocus to prevent cursor jumping issues during Turnstile load
             />
           </div>
           <div className="relative">
