@@ -26,8 +26,10 @@ export const Admin: React.FC = () => {
 
   const loadPosts = async () => {
     try {
-      const data = await api.getPosts();
-      setPosts(data.sort((a, b) => b.createdAt - a.createdAt));
+      // For Admin, we want to see all posts or a large list. 
+      // Fetching 100 for now. In a real large app, Admin should also be paginated.
+      const data = await api.getPosts(1, 100);
+      setPosts(data.list); // Access .list from paginated response
     } catch (e) {
       console.error(e);
     }

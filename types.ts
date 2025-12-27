@@ -21,6 +21,13 @@ export interface PostMetadata {
   url?: string;
 }
 
+export interface PaginatedResponse<T> {
+  list: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

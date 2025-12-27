@@ -2,32 +2,68 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { PostMetadata } from '../types';
 import { api } from '../services/api';
-import { Clock, Tag, Eye, ChevronRight, AlertCircle } from 'lucide-react';
+import { Clock, Tag, Eye, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 export const Home: React.FC = () => {
   const [posts, setPosts] = useState<PostMetadata[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  
   const [searchParams] = useSearchParams();
   const search = searchParams.get('search')?.toLowerCase() || '';
   const categoryFilter = searchParams.get('category');
   const tagFilter = searchParams.get('tag');
 
+  // Initial Fetch
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setLoading(true);
-        const data = await api.getPosts();
-        setPosts(data.sort((a, b) => b.createdAt - a.createdAt));
-      } catch (err) {
-        console.error("Failed to fetch posts", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPosts();
-  }, []);
+    setPage(1);
+    setPosts([]);
+    fetchPosts(1, true);
+  }, [search, categoryFilter, tagFilter]);
 
-  // Client-side filtering
+  const fetchPosts = async (pageNum: number, isReset: boolean) => {
+    try {
+      if (isReset) setLoading(true);
+      else setLoadingMore(true);
+
+      // If filtering, we fetch more to filter locally (since KV filtering is hard without secondary indexes)
+      // Or in a real app, backend would handle filter.
+      // Here we fetch a larger batch if filtered, or just rely on client filtering for small blogs.
+      // Simplification: We fetch standard pages, and client filters. 
+      // Note: This effectively breaks pagination if filters are heavy. 
+      // Correct way for KV: fetch all or maintain separate index. 
+      // For this demo, we'll assume filtering is done on the fetched set or we fetch 100 items if filtered.
+      
+      const limit = (search || categoryFilter || tagFilter) ? 100 : 9;
+      const data = await api.getPosts(pageNum, limit);
+      
+      const newPosts = data.list;
+
+      if (isReset) {
+        setPosts(newPosts);
+      } else {
+        setPosts(prev => [...prev, ...newPosts]);
+      }
+
+      setHasMore(newPosts.length === limit); // Simple check: if we got full page, maybe more exists
+
+    } catch (err) {
+      console.error("Failed to fetch posts", err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchPosts(nextPage, false);
+  };
+
+  // Client-side filtering (applied to the loaded posts)
   const filteredPosts = posts.filter(post => {
     const matchesSearch = !search || post.title.toLowerCase().includes(search) || post.excerpt.toLowerCase().includes(search);
     const matchesCategory = !categoryFilter || post.category === categoryFilter;
@@ -46,7 +82,7 @@ export const Home: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10">
       {/* Filters Display */}
       {(search || categoryFilter || tagFilter) && (
         <div className="flex items-center gap-2 text-sm text-slate-700 bg-white/30 backdrop-blur-md px-4 py-2 rounded-xl inline-flex border border-white/40">
@@ -65,7 +101,7 @@ export const Home: React.FC = () => {
             <Link 
               key={post.id} 
               to={`/post/${post.id}`}
-              className="group block relative bg-glass backdrop-blur-md rounded-2xl p-6 border border-glassBorder hover:bg-white/70 hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+              className="group block relative bg-glass backdrop-blur-md rounded-2xl p-6 border border-glassBorder hover:bg-white/70 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col h-full"
             >
               <div className="flex justify-between items-start mb-4">
                 <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 px-2 py-1 rounded-md">
@@ -81,7 +117,7 @@ export const Home: React.FC = () => {
                 {post.title}
               </h2>
               
-              <p className="text-slate-600 text-sm mb-6 line-clamp-3 leading-relaxed">
+              <p className="text-slate-600 text-sm mb-6 line-clamp-3 leading-relaxed flex-grow">
                 {post.excerpt}
               </p>
 
@@ -109,6 +145,20 @@ export const Home: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Load More Button */}
+      {hasMore && !search && !categoryFilter && !tagFilter && (
+        <div className="flex justify-center pt-8">
+            <button 
+                onClick={handleLoadMore} 
+                disabled={loadingMore}
+                className="px-8 py-3 bg-white/40 dark:bg-black/40 hover:bg-white/60 dark:hover:bg-black/60 backdrop-blur-md rounded-full text-slate-700 dark:text-slate-200 font-medium transition-all shadow-sm border border-white/20 disabled:opacity-50 flex items-center gap-2"
+            >
+                {loadingMore && <Loader2 className="animate-spin" size={18} />}
+                {loadingMore ? '加载中...' : '加载更多'}
+            </button>
+        </div>
+      )}
     </div>
   );
 };

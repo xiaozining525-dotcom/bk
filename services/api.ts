@@ -1,4 +1,4 @@
-import { ApiResponse, BlogPost, PostMetadata, SiteConfig } from '../types';
+import { ApiResponse, BlogPost, PostMetadata, SiteConfig, PaginatedResponse } from '../types';
 import { API_BASE, ADMIN_TOKEN_KEY } from '../constants';
 
 const getHeaders = () => {
@@ -18,7 +18,6 @@ export const api = {
         return json.data;
     } catch (e) {
         console.error("Config load error, using defaults", e);
-        // Fallback for dev/error
         return { 
             videoUrl: "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4", 
             musicUrl: "",
@@ -27,11 +26,19 @@ export const api = {
     }
   },
 
-  async getPosts(): Promise<PostMetadata[]> {
-    const res = await fetch(`${API_BASE}/posts`);
-    const json: ApiResponse<PostMetadata[]> = await res.json();
+  // Updated to support Pagination
+  async getPosts(page = 1, limit = 10): Promise<PaginatedResponse<PostMetadata>> {
+    const res = await fetch(`${API_BASE}/posts?page=${page}&limit=${limit}`);
+    const json: ApiResponse<PaginatedResponse<PostMetadata>> = await res.json();
+    
     if (!json.success) throw new Error(json.error);
-    return json.data || [];
+    
+    // Safety check if backend returns older array format during migration
+    if (Array.isArray(json.data)) {
+        return { list: json.data, total: json.data.length, page: 1, limit: json.data.length };
+    }
+
+    return json.data as PaginatedResponse<PostMetadata>;
   },
 
   async getPost(id: string): Promise<BlogPost> {
@@ -60,15 +67,15 @@ export const api = {
     if (!json.success) throw new Error(json.error);
   },
 
-  async login(password: string): Promise<boolean> {
+  async login(password: string, turnstileToken?: string): Promise<boolean> {
     const res = await fetch(`${API_BASE}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, turnstileToken }),
     });
     const json = await res.json();
-    if (json.success) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, password); // Simple storage for this demo
+    if (json.success && json.data?.token) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, json.data.token); 
       return true;
     }
     return false;

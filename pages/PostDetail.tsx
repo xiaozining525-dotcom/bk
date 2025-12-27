@@ -60,9 +60,9 @@ export const PostDetail: React.FC = () => {
         setHeadings(extractHeadings(data.content));
 
         // 2. 获取所有文章以计算相关推荐
-        // 注意：在生产环境中，如果文章数量巨大，建议后端实现此逻辑。
-        // 对于个人博客，前端过滤即可。
-        const allPosts = await api.getPosts();
+        // 为了计算相关性，我们获取最近的 50 篇文章（假设相关文章在近期）
+        const allPostsData = await api.getPosts(1, 50);
+        const allPosts = allPostsData.list;
         
         const related = allPosts
             .filter(p => p.id !== data.id) // 排除当前文章
@@ -244,6 +244,7 @@ export const PostDetail: React.FC = () => {
                                 img: ({node, ...props}) => (
                                    <img 
                                         className="rounded-xl shadow-md mx-auto my-6 hover:scale-[1.01] transition-transform duration-300" 
+                                        loading="lazy"
                                         {...props} 
                                         alt={props.alt || ''} 
                                         referrerPolicy="no-referrer"
