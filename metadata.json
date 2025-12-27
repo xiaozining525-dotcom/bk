@@ -1,5 +1,5 @@
 {
-  "name": "My Blog",
+  "name": "Yn Blog",
   "description": "A minimalist, glassmorphism-styled personal blog backed by Cloudflare KV and Pages Functions.",
   "requestFramePermissions": []
 }

@@ -59,7 +59,8 @@ interface Env {
   BACKGROUND_VIDEO_URL?: string;
   BACKGROUND_MUSIC_URL?: string;
   AVATAR_URL?: string;
-  TURNSTILE_SECRET_KEY?: string; 
+  TURNSTILE_SECRET_KEY?: string;
+  ENABLE_TURNSTILE?: string; // "true" or "false"
 }
 
 // Database Interfaces
@@ -230,6 +231,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   };
 
   const verifyTurnstile = async (token: string, ip: string) => {
+      // Feature Flag: If ENABLE_TURNSTILE is explicitly set to "false", skip validation
+      if (env.ENABLE_TURNSTILE === 'false') return true;
+
       if (!env.TURNSTILE_SECRET_KEY) return true; 
       if (!token) return false;
 
@@ -263,7 +267,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return jsonResponse({
       videoUrl: env.BACKGROUND_VIDEO_URL || DEFAULT_VIDEO,
       musicUrl: env.BACKGROUND_MUSIC_URL || "",
-      avatarUrl: env.AVATAR_URL || DEFAULT_AVATAR
+      avatarUrl: env.AVATAR_URL || DEFAULT_AVATAR,
+      // Pass the setting to frontend
+      enableTurnstile: env.ENABLE_TURNSTILE !== 'false' 
     }, 200, 3600);
   }
 

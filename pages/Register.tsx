@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { UserPlus, AlertTriangle, RefreshCw, CheckCircle } from 'lucide-react';
+import { SiteConfig } from '../types';
+
+interface RegisterProps {
+  siteConfig: SiteConfig;
+}
 
 declare global {
   interface Window {
@@ -9,7 +14,7 @@ declare global {
   }
 }
 
-export const Register: React.FC = () => {
+export const Register: React.FC<RegisterProps> = ({ siteConfig }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,6 +28,19 @@ export const Register: React.FC = () => {
 
   // Initialize Turnstile
   useEffect(() => {
+    // If Turnstile is disabled by config, skip rendering
+    if (!siteConfig.enableTurnstile) return;
+
+    // Dynamically inject script if missing
+    if (!document.getElementById('turnstile-script')) {
+        const script = document.createElement('script');
+        script.id = 'turnstile-script';
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+    }
+
     let intervalId: any = null;
 
     const renderWidget = () => {
@@ -63,7 +81,7 @@ export const Register: React.FC = () => {
              try { window.turnstile.remove(widgetId.current); } catch(e) {}
         }
     };
-  }, [retryCount]);
+  }, [retryCount, siteConfig.enableTurnstile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +92,7 @@ export const Register: React.FC = () => {
         return;
     }
 
-    if (!token) {
+    if (siteConfig.enableTurnstile && !token) {
         setError('请完成人机验证');
         return;
     }
@@ -87,7 +105,7 @@ export const Register: React.FC = () => {
       navigate('/login');
     } catch (e: any) {
       setError(e.message || '注册失败');
-      if (window.turnstile && widgetId.current) {
+      if (siteConfig.enableTurnstile && window.turnstile && widgetId.current) {
           window.turnstile.reset(widgetId.current);
           setToken('');
       }
@@ -141,9 +159,11 @@ export const Register: React.FC = () => {
             />
           </div>
           
-          <div className="flex flex-col items-center justify-center min-h-[65px] gap-2">
-            <div ref={turnstileRef} className="w-full flex justify-center"></div>
-          </div>
+          {siteConfig.enableTurnstile && (
+              <div className="flex flex-col items-center justify-center min-h-[65px] gap-2">
+                <div ref={turnstileRef} className="w-full flex justify-center"></div>
+              </div>
+          )}
 
           <button
             type="submit"

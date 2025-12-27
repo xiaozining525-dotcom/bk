@@ -21,7 +21,8 @@ export const api = {
         return { 
             videoUrl: "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4", 
             musicUrl: "",
-            avatarUrl: "https://picsum.photos/300/300"
+            avatarUrl: "https://picsum.photos/300/300",
+            enableTurnstile: true // Default to true if fetch fails, but allow backend to override
         };
     }
   },

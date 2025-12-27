@@ -42,6 +42,7 @@ export interface SiteConfig {
   videoUrl: string;
   musicUrl: string;
   avatarUrl: string;
+  enableTurnstile: boolean; // Added: Control Turnstile activation
 }
 
 export enum LoginStatus {

@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Lock, User, AlertTriangle, RefreshCw } from 'lucide-react';
+import { SiteConfig } from '../types';
 
 interface LoginProps {
   onLoginSuccess: () => void;
+  siteConfig: SiteConfig;
 }
 
 declare global {
@@ -13,8 +15,8 @@ declare global {
   }
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState(''); // Changed: Removed default 'admin' value
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, siteConfig }) => {
+  const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,6 +28,19 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   // Initialize Cloudflare Turnstile with retry mechanism
   useEffect(() => {
+    // If Turnstile is disabled by config, skip rendering
+    if (!siteConfig.enableTurnstile) return;
+
+    // Dynamically inject script if missing
+    if (!document.getElementById('turnstile-script')) {
+        const script = document.createElement('script');
+        script.id = 'turnstile-script';
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+    }
+
     let intervalId: any = null;
 
     const renderWidget = () => {
@@ -86,13 +101,13 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
              widgetId.current = null;
         }
     };
-  }, [retryCount]); // Re-run when retryCount changes
+  }, [retryCount, siteConfig.enableTurnstile]); // Re-run when retryCount or config changes
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!token) {
+    if (siteConfig.enableTurnstile && !token) {
         setError('请先完成人机验证');
         return;
     }
@@ -107,7 +122,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       } else {
         setError('用户名、密码错误或验证过期');
         // Reset widget on failure
-        if (window.turnstile && widgetId.current) {
+        if (siteConfig.enableTurnstile && window.turnstile && widgetId.current) {
             window.turnstile.reset(widgetId.current);
             setToken('');
         }
@@ -137,7 +152,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="用户名" 
               className="w-full pl-12 pr-4 py-3 bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all dark:text-white placeholder-slate-500"
-              // Removed autoFocus to prevent cursor jumping issues during Turnstile load
             />
           </div>
           <div className="relative">
@@ -151,19 +165,21 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
           </div>
           
-          {/* Turnstile Container */}
-          <div className="flex flex-col items-center justify-center min-h-[65px] gap-2">
-            <div ref={turnstileRef} className="w-full flex justify-center"></div>
-            {error.includes('400020') && (
-                <button 
-                    type="button" 
-                    onClick={() => setRetryCount(c => c + 1)}
-                    className="text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                    <RefreshCw size={12} /> 重新加载验证码
-                </button>
-            )}
-          </div>
+          {/* Turnstile Container - Conditionally Rendered */}
+          {siteConfig.enableTurnstile && (
+              <div className="flex flex-col items-center justify-center min-h-[65px] gap-2">
+                <div ref={turnstileRef} className="w-full flex justify-center"></div>
+                {error.includes('400020') && (
+                    <button 
+                        type="button" 
+                        onClick={() => setRetryCount(c => c + 1)}
+                        className="text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                        <RefreshCw size={12} /> 重新加载验证码
+                    </button>
+                )}
+              </div>
+          )}
 
           <button
             type="submit"
@@ -178,7 +194,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 <AlertTriangle size={12} />
                 <span>{error}</span>
               </div>
-              {error.includes('400020') && (
+              {siteConfig.enableTurnstile && error.includes('400020') && (
                   <span className="text-[10px] opacity-75">请关闭广告拦截插件或检查 Cloudflare 域名配置</span>
               )}
             </div>

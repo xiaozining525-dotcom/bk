@@ -56,7 +56,8 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isSetupCompleted, setIsSetupCompleted] = useState(true); // Default true to avoid flash
-  const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '', avatarUrl: '' });
+  // Default enableTurnstile to true to be safe, but API will overwrite
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>({ videoUrl: '', musicUrl: '', avatarUrl: '', enableTurnstile: true });
 
   useEffect(() => {
     // Check local storage for basic session persistence
@@ -106,12 +107,12 @@ const App: React.FC = () => {
           <Route path="login" element={
             !isSetupCompleted ? <Navigate to="/register" replace /> :
             isAuthenticated ? <Navigate to="/admin" replace /> : 
-            <Login onLoginSuccess={() => setIsAuthenticated(true)} />
+            <Login onLoginSuccess={() => setIsAuthenticated(true)} siteConfig={siteConfig} />
           } />
 
           {/* Register Route: Only accessible if setup is NOT completed */}
           <Route path="register" element={
-             isSetupCompleted ? <Navigate to="/login" replace /> : <Register />
+             isSetupCompleted ? <Navigate to="/login" replace /> : <Register siteConfig={siteConfig} />
           } />
           
           {/* Protected Admin Route */}
