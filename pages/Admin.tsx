@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { BlogPost, PostMetadata } from '../types';
 import { CATEGORIES } from '../constants';
-import { Save, Trash2, Plus, Edit3, UploadCloud } from 'lucide-react';
+import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle } from 'lucide-react';
 
 export const Admin: React.FC = () => {
   const [posts, setPosts] = useState<PostMetadata[]>([]);
@@ -18,6 +18,7 @@ export const Admin: React.FC = () => {
     tags: [],
     url: '',
     id: '',
+    status: 'draft', // Default to draft
   };
 
   useEffect(() => {
@@ -26,16 +27,15 @@ export const Admin: React.FC = () => {
 
   const loadPosts = async () => {
     try {
-      // For Admin, we want to see all posts or a large list. 
-      // Fetching 100 for now. In a real large app, Admin should also be paginated.
+      // Fetch posts (Admin sees all including drafts)
       const data = await api.getPosts(1, 100);
-      setPosts(data.list); // Access .list from paginated response
+      setPosts(data.list); 
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (statusOverride?: 'published' | 'draft') => {
     if (!editingPost?.title || !editingPost?.content) return;
     
     try {
@@ -45,10 +45,11 @@ export const Admin: React.FC = () => {
         id: editingPost.id || crypto.randomUUID(),
         createdAt: editingPost.createdAt || Date.now(),
         views: editingPost.views || 0,
+        status: statusOverride || editingPost.status || 'draft',
       } as BlogPost;
 
       await api.createOrUpdatePost(postToSave);
-      setMessage('发布成功！');
+      setMessage('保存成功！');
       setEditingPost(null);
       loadPosts();
       setTimeout(() => setMessage(''), 2000);
@@ -138,13 +139,23 @@ export const Admin: React.FC = () => {
               value={editingPost.title}
               onChange={e => setEditingPost({...editingPost, title: e.target.value})}
             />
-            <select
-              className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
-              value={editingPost.category}
-              onChange={e => setEditingPost({...editingPost, category: e.target.value})}
-            >
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="flex gap-2">
+                <select
+                className="flex-1 p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                value={editingPost.category}
+                onChange={e => setEditingPost({...editingPost, category: e.target.value})}
+                >
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                className={`w-32 p-3 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white ${editingPost.status === 'published' ? 'bg-green-100/50 dark:bg-green-900/30' : 'bg-orange-100/50 dark:bg-orange-900/30'}`}
+                value={editingPost.status || 'draft'}
+                onChange={e => setEditingPost({...editingPost, status: e.target.value as any})}
+                >
+                    <option value="draft">草稿</option>
+                    <option value="published">已发布</option>
+                </select>
+            </div>
           </div>
           
           <input
@@ -196,10 +207,16 @@ export const Admin: React.FC = () => {
 
           <div className="flex gap-4 pt-2">
             <button 
-                onClick={handleSave} 
+                onClick={() => handleSave('draft')} 
+                className="flex-1 bg-slate-500 text-white py-3 rounded-xl hover:bg-slate-600 transition flex justify-center items-center gap-2 font-medium"
+            >
+                <FileText size={18} /> 存为草稿
+            </button>
+            <button 
+                onClick={() => handleSave('published')} 
                 className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition flex justify-center items-center gap-2 font-medium"
             >
-                <Save size={18} /> 保存发布
+                <Save size={18} /> 发布上线
             </button>
             <button 
                 onClick={() => setEditingPost(null)} 
@@ -214,6 +231,7 @@ export const Admin: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
+                <th className="py-3 px-2">状态</th>
                 <th className="py-3 px-2">标题</th>
                 <th className="py-3 px-2">分类</th>
                 <th className="py-3 px-2">发布时间</th>
@@ -223,6 +241,17 @@ export const Admin: React.FC = () => {
             <tbody>
               {posts.map(post => (
                 <tr key={post.id} className="border-b border-slate-100/30 dark:border-white/5 hover:bg-white/30 dark:hover:bg-white/5 transition">
+                  <td className="py-3 px-2">
+                    {post.status === 'published' ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100/50 text-green-700 text-xs font-bold border border-green-200/50">
+                            <CheckCircle size={10} className="mr-1"/> 已发布
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-200/50 text-slate-600 text-xs font-bold border border-slate-300/50">
+                            <FileText size={10} className="mr-1"/> 草稿
+                        </span>
+                    )}
+                  </td>
                   <td className="py-3 px-2 font-medium text-slate-800 dark:text-slate-200">
                     <div className="flex flex-col">
                         <span>{post.title}</span>

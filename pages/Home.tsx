@@ -13,13 +13,14 @@ export const Home: React.FC = () => {
   
   const [searchParams] = useSearchParams();
   const search = searchParams.get('search')?.toLowerCase() || '';
-  const categoryFilter = searchParams.get('category');
-  const tagFilter = searchParams.get('tag');
+  const categoryFilter = searchParams.get('category') || '';
+  const tagFilter = searchParams.get('tag') || '';
 
-  // Initial Fetch
+  // Reset and fetch when filters change
   useEffect(() => {
     setPage(1);
     setPosts([]);
+    setHasMore(true);
     fetchPosts(1, true);
   }, [search, categoryFilter, tagFilter]);
 
@@ -28,16 +29,9 @@ export const Home: React.FC = () => {
       if (isReset) setLoading(true);
       else setLoadingMore(true);
 
-      // If filtering, we fetch more to filter locally (since KV filtering is hard without secondary indexes)
-      // Or in a real app, backend would handle filter.
-      // Here we fetch a larger batch if filtered, or just rely on client filtering for small blogs.
-      // Simplification: We fetch standard pages, and client filters. 
-      // Note: This effectively breaks pagination if filters are heavy. 
-      // Correct way for KV: fetch all or maintain separate index. 
-      // For this demo, we'll assume filtering is done on the fetched set or we fetch 100 items if filtered.
-      
-      const limit = (search || categoryFilter || tagFilter) ? 100 : 9;
-      const data = await api.getPosts(pageNum, limit);
+      const limit = 9;
+      // Pass filters to API
+      const data = await api.getPosts(pageNum, limit, search, categoryFilter, tagFilter);
       
       const newPosts = data.list;
 
@@ -47,10 +41,16 @@ export const Home: React.FC = () => {
         setPosts(prev => [...prev, ...newPosts]);
       }
 
-      setHasMore(newPosts.length === limit); // Simple check: if we got full page, maybe more exists
+      // If we received fewer items than the limit, we've reached the end
+      if (newPosts.length < limit) {
+          setHasMore(false);
+      } else {
+          setHasMore(true);
+      }
 
     } catch (err) {
       console.error("Failed to fetch posts", err);
+      setHasMore(false);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -62,14 +62,6 @@ export const Home: React.FC = () => {
     setPage(nextPage);
     fetchPosts(nextPage, false);
   };
-
-  // Client-side filtering (applied to the loaded posts)
-  const filteredPosts = posts.filter(post => {
-    const matchesSearch = !search || post.title.toLowerCase().includes(search) || post.excerpt.toLowerCase().includes(search);
-    const matchesCategory = !categoryFilter || post.category === categoryFilter;
-    const matchesTag = !tagFilter || post.tags.includes(tagFilter);
-    return matchesSearch && matchesCategory && matchesTag;
-  });
 
   if (loading) {
     return (
@@ -96,8 +88,8 @@ export const Home: React.FC = () => {
 
       {/* Posts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredPosts.length > 0 ? (
-          filteredPosts.map(post => (
+        {posts.length > 0 ? (
+          posts.map(post => (
             <Link 
               key={post.id} 
               to={`/post/${post.id}`}
@@ -147,7 +139,7 @@ export const Home: React.FC = () => {
       </div>
 
       {/* Load More Button */}
-      {hasMore && !search && !categoryFilter && !tagFilter && (
+      {hasMore && (
         <div className="flex justify-center pt-8">
             <button 
                 onClick={handleLoadMore} 

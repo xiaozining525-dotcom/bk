@@ -44,8 +44,22 @@ export const PostDetail: React.FC = () => {
   const [stats, setStats] = useState({ wordCount: 0, readingTime: 0 });
   const [headings, setHeadings] = useState<{level: number, text: string, id: string}[]>([]);
   const [showShareTooltip, setShowShareTooltip] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
   
   const navigate = useNavigate();
+
+  // 监听滚动计算阅读进度
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrollPosition = window.scrollY;
+      const progress = (scrollPosition / totalHeight) * 100;
+      setScrollProgress(progress);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -65,7 +79,7 @@ export const PostDetail: React.FC = () => {
         const allPosts = allPostsData.list;
         
         const related = allPosts
-            .filter(p => p.id !== data.id) // 排除当前文章
+            .filter(p => p.id !== data.id && p.status !== 'draft') // 排除当前文章和草稿
             .map(p => {
                 let score = 0;
                 // 同分类 +3分
@@ -144,11 +158,21 @@ export const PostDetail: React.FC = () => {
             <meta name="description" content={post.excerpt || post.content.slice(0, 100)} />
         </Helmet>
 
+        {/* Reading Progress Bar */}
+        <div className="fixed top-0 left-0 h-1 bg-gradient-to-r from-blue-400 to-purple-600 z-[60]" style={{ width: `${scrollProgress}%`, transition: 'width 0.1s ease-out' }}></div>
+
         {/* Header Section */}
         <div className="mb-8">
-            <Link to="/" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 mb-6 transition-colors group">
-                <ArrowLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" /> 返回列表
-            </Link>
+            <div className="flex justify-between items-center mb-6">
+                <Link to="/" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors group">
+                    <ArrowLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" /> 返回列表
+                </Link>
+                {post.status === 'draft' && (
+                     <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
+                        草稿预览模式
+                     </span>
+                )}
+            </div>
             
             <div className="bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-8 mb-8 shadow-sm">
                 <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wide">

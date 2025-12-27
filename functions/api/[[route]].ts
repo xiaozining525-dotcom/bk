@@ -4,9 +4,8 @@
  * - KV backed storage
  * - Session-based Authentication (Secure)
  * - Rate Limiting (Brute-force protection)
- * - Edge Caching
- * - Turnstile Validation
- * - Pagination
+ * - Server-side Filtering
+ * - Draft System
  */
 
 // Define Cloudflare Workers types
@@ -39,7 +38,7 @@ interface Env {
   BACKGROUND_VIDEO_URL?: string;
   BACKGROUND_MUSIC_URL?: string;
   AVATAR_URL?: string;
-  TURNSTILE_SECRET_KEY?: string; // Add this env var in Cloudflare Dashboard
+  TURNSTILE_SECRET_KEY?: string; 
 }
 
 interface PostMetadata {
@@ -51,6 +50,7 @@ interface PostMetadata {
   createdAt: number;
   views: number;
   url?: string;
+  status?: 'published' | 'draft';
 }
 
 const CORS_HEADERS = {
@@ -63,7 +63,6 @@ const METADATA_KEY = 'metadata:posts';
 const SESSION_PREFIX = 'session:';
 const LIMIT_PREFIX = 'rate_limit:';
 
-// Default fallback assets
 const DEFAULT_VIDEO = "https://cdn.pixabay.com/video/2023/04/13/158656-817354676_large.mp4";
 const DEFAULT_AVATAR = "https://picsum.photos/300/300";
 
@@ -142,7 +141,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     const body: { password?: string; turnstileToken?: string } = await request.json();
 
-    // Turnstile Validation
     if (env.TURNSTILE_SECRET_KEY && body.turnstileToken) {
       const formData = new FormData();
       formData.append('secret', env.TURNSTILE_SECRET_KEY);
@@ -179,36 +177,64 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 3. Posts Management
   if (path.startsWith('posts')) {
-    
-    // GET List (Paginated) or Single
+    const isAuthenticated = await checkAuth();
+
+    // GET List (Paginated + Filtered) or Single
     if (request.method === 'GET') {
       const id = url.searchParams.get('id');
 
       if (id) {
-        // ... Single post logic (same as before) ...
         const postData = await env.BLOG_KV.get(`post:${id}`, 'json');
         if (!postData) return errorResponse('Post not found', 404);
         
+        const fullPost: any = postData;
+
+        // Draft Protection: Only admin can see drafts
+        if (fullPost.status === 'draft' && !isAuthenticated) {
+            return errorResponse('Unauthorized: Draft', 403);
+        }
+        
+        // Update views count
         const metaList = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
         const idx = metaList.findIndex(p => p.id === id);
         if (idx !== -1) {
              metaList[idx].views = (metaList[idx].views || 0) + 1;
              await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(metaList));
-             const fullPost: any = postData;
              fullPost.views = metaList[idx].views;
              await env.BLOG_KV.put(`post:${id}`, JSON.stringify(fullPost));
+             // Don't cache views update response strictly
              return jsonResponse(fullPost, 200, 0); 
         }
         return jsonResponse(postData, 200, 60);
       } else {
-        // PAGINATION LOGIC HERE
+        // --- PAGINATION & FILTERING ---
         const page = parseInt(url.searchParams.get('page') || '1');
         const limit = parseInt(url.searchParams.get('limit') || '10');
+        const search = (url.searchParams.get('search') || '').toLowerCase();
+        const category = url.searchParams.get('category');
+        const tag = url.searchParams.get('tag');
         
-        // Get full list (In a real DB, we would query with offset, for KV we fetch list and slice)
-        // Note: For very large blogs, we'd need to shard the metadata list. 
-        // For < 1000 posts, one JSON key is fine (max value size 25MB).
         let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
+        
+        // Filter: Status (Drafts visible only to admin)
+        if (!isAuthenticated) {
+            list = list.filter(p => p.status !== 'draft');
+        }
+
+        // Filter: Search
+        if (search) {
+            list = list.filter(p => p.title.toLowerCase().includes(search) || p.excerpt.toLowerCase().includes(search));
+        }
+
+        // Filter: Category
+        if (category) {
+            list = list.filter(p => p.category === category);
+        }
+
+        // Filter: Tag
+        if (tag) {
+            list = list.filter(p => p.tags && p.tags.includes(tag));
+        }
         
         // Sort desc by date
         list.sort((a, b) => b.createdAt - a.createdAt);
@@ -218,8 +244,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const end = start + limit;
         const pagedList = list.slice(start, end);
 
-        // Cache first page longer, others shorter
-        const cacheTime = page === 1 ? 60 : 30;
+        // Cache first page longer if no filters, others shorter
+        // If authenticated (admin is viewing), do not cache to ensure latest status is seen
+        const cacheTime = isAuthenticated ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
 
         return jsonResponse({
           list: pagedList,
@@ -232,13 +259,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     // POST (Protected)
     if (request.method === 'POST') {
-      if (!(await checkAuth())) return errorResponse('Unauthorized', 401);
+      if (!isAuthenticated) return errorResponse('Unauthorized', 401);
       
       const body: any = await request.json();
       if (!body.title) return errorResponse('Missing title');
 
       if (!body.id) body.id = crypto.randomUUID();
       if (!body.createdAt) body.createdAt = Date.now();
+      if (!body.status) body.status = 'draft'; // Default to draft
 
       await env.BLOG_KV.put(`post:${body.id}`, JSON.stringify(body));
 
@@ -253,7 +281,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         category: body.category || 'Uncategorized',
         createdAt: body.createdAt,
         views: body.views || 0,
-        url: body.url || ''
+        url: body.url || '',
+        status: body.status
       };
 
       if (metaIndex >= 0) {
@@ -269,7 +298,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     // DELETE (Protected)
     if (request.method === 'DELETE') {
-      if (!(await checkAuth())) return errorResponse('Unauthorized', 401);
+      if (!isAuthenticated) return errorResponse('Unauthorized', 401);
       
       const id = url.searchParams.get('id');
       if (!id) return errorResponse('Missing ID');

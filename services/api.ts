@@ -26,9 +26,21 @@ export const api = {
     }
   },
 
-  // Updated to support Pagination
-  async getPosts(page = 1, limit = 10): Promise<PaginatedResponse<PostMetadata>> {
-    const res = await fetch(`${API_BASE}/posts?page=${page}&limit=${limit}`);
+  // Updated to support Server-side Filtering
+  async getPosts(page = 1, limit = 10, search = '', category = '', tag = ''): Promise<PaginatedResponse<PostMetadata>> {
+    const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        search,
+        category,
+        tag
+    });
+
+    // If admin is logged in, request drafts as well (backend checks auth header)
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    const res = await fetch(`${API_BASE}/posts?${params.toString()}`, { headers });
     const json: ApiResponse<PaginatedResponse<PostMetadata>> = await res.json();
     
     if (!json.success) throw new Error(json.error);
@@ -42,7 +54,9 @@ export const api = {
   },
 
   async getPost(id: string): Promise<BlogPost> {
-    const res = await fetch(`${API_BASE}/posts?id=${id}`);
+    const res = await fetch(`${API_BASE}/posts?id=${id}`, {
+        headers: getHeaders() // Pass headers to allow viewing drafts if admin
+    });
     const json: ApiResponse<BlogPost> = await res.json();
     if (!json.success) throw new Error(json.error);
     return json.data as BlogPost;

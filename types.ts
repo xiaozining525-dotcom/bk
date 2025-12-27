@@ -8,6 +8,7 @@ export interface BlogPost {
   createdAt: number;
   views: number;
   url?: string;
+  status: 'published' | 'draft'; // Added status
 }
 
 export interface PostMetadata {
@@ -19,6 +20,7 @@ export interface PostMetadata {
   createdAt: number;
   views: number;
   url?: string;
+  status: 'published' | 'draft'; // Added status
 }
 
 export interface PaginatedResponse<T> {
