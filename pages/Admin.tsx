@@ -522,7 +522,57 @@ export const Admin: React.FC = () => {
                     </form>
                 </div>
             ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* 1. Mobile Card View */}
+                <div className="md:hidden space-y-4">
+                    {users.map(u => (
+                        <div key={u.username} className="bg-white/40 dark:bg-white/5 p-4 rounded-xl border border-white/20 dark:border-white/10 shadow-sm relative overflow-hidden">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300 uppercase">
+                                        {u.username.slice(0, 1)}
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-800 dark:text-slate-100">{u.username}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</div>
+                                    </div>
+                                </div>
+                                {u.role === 'admin' ? (
+                                    <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold">Admin</span>
+                                ) : (
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">Editor</span>
+                                )}
+                            </div>
+
+                            <div className="mt-3 text-sm text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-black/20 p-2 rounded-lg">
+                                <span className="text-xs text-slate-500 block mb-1">权限:</span>
+                                {u.role === 'admin' ? 'all' : u.permissions.join(', ') || '无'}
+                            </div>
+
+                            {u.role !== 'admin' && (
+                                <div className="mt-4 flex gap-2">
+                                    <button 
+                                        onClick={() => openEditUserModal(u)}
+                                        className="flex-1 py-2 text-sm bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
+                                    >
+                                        修改权限
+                                    </button>
+                                    {u.username !== currentUser?.username && (
+                                        <button 
+                                            onClick={() => handleDeleteUser(u.username)}
+                                            className="flex-1 py-2 text-sm bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded-lg font-medium"
+                                        >
+                                            删除
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                {/* 2. Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
@@ -545,7 +595,8 @@ export const Admin: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-2 font-medium">{u.username}</td>
                                     <td className="py-3 px-2 text-xs text-slate-500">
-                                        {u.role === 'admin' ? '全部权限' : u.permissions.join(', ') || '无'}
+                                        {/* Changed: Display 'all' for admin instead of Chinese */}
+                                        {u.role === 'admin' ? 'all' : u.permissions.join(', ') || '无'}
                                     </td>
                                     <td className="py-3 px-2 text-sm text-slate-500">
                                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
@@ -578,6 +629,7 @@ export const Admin: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+                </>
             )}
           </>
       )}

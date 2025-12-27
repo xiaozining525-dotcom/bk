@@ -400,11 +400,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const targetUser = await env.DB.prepare('SELECT role FROM users WHERE username = ?').bind(body.username).first<{role: string}>();
           if (!targetUser) return errorResponse("User not found", 404);
 
-          // Prevent modifying Main Admin (role=admin) permissions if they are the last admin, or generally for safety
-          if (targetUser.role === 'admin' && currentUser.username !== body.username) {
-              // Optional: decide if admins can modify other admins. For now, let's allow it but maybe restrict if needed.
-              // Assuming 'admin' role always implies full permissions, updating permissions for an 'admin' role user 
-              // might be redundant but harmless unless we remove 'all'.
+          // Rule: Editors cannot modify Admins
+          if (currentUser.role !== 'admin' && targetUser.role === 'admin') {
+               return errorResponse("Permission denied: You cannot modify a Super Admin.", 403);
           }
 
           try {
@@ -427,13 +425,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           
           if (!targetUser) return errorResponse("User not found");
 
-          // Count Admins to prevent locking out
-          const adminCountResult = await env.DB.prepare("SELECT count(*) as count FROM users WHERE role = 'admin'").first<{count: number}>();
-          const adminCount = adminCountResult?.count || 0;
-
-          if (targetUser.role === 'admin' && adminCount <= 1) {
-             return errorResponse("Cannot delete the only admin");
+          // Rule: Editors cannot delete Admins
+          if (currentUser.role !== 'admin' && targetUser.role === 'admin') {
+              return errorResponse("Permission denied: You cannot delete a Super Admin.", 403);
           }
+
+          // Rule: Cannot delete the last Admin
+          if (targetUser.role === 'admin') {
+             const adminCountResult = await env.DB.prepare("SELECT count(*) as count FROM users WHERE role = 'admin'").first<{count: number}>();
+             const adminCount = adminCountResult?.count || 0;
+             if (adminCount <= 1) {
+                 return errorResponse("Cannot delete the only Super Admin");
+             }
+          }
+
+          // If currentUser is Admin, they can delete anyone (except last admin or self)
+          // If currentUser is Editor, they can delete other Editors (implied by previous check)
 
           await env.DB.prepare('DELETE FROM users WHERE username = ?').bind(targetUsername).run();
           return jsonResponse({ success: true });
