@@ -532,7 +532,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         
         const offset = (page - 1) * limit;
         
-        // Added isPinned to SELECT
+        // Base Query (includes WHERE clauses)
         let query = 'SELECT id, title, excerpt, tags, category, createdAt, views, url, status, isPinned FROM posts WHERE 1=1';
         const params: any[] = [];
 
@@ -560,25 +560,62 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
 
         // Count Total
+        // Note: isPinned check is safe here because we construct countQuery from base query
         const countQuery = query.replace('SELECT id, title, excerpt, tags, category, createdAt, views, url, status, isPinned', 'SELECT count(*) as total');
-        const totalResult = await env.DB.prepare(countQuery).bind(...params).first<{total: number}>();
-        const total = totalResult?.total || 0;
-
-        // Fetch Data - Updated SORT ORDER to prioritize pinned posts
-        query += " ORDER BY isPinned DESC, createdAt DESC LIMIT ? OFFSET ?";
-        params.push(limit);
-        params.push(offset);
-
-        const results = await env.DB.prepare(query).bind(...params).all<DBPost>();
         
-        const list = results.results.map(p => ({
-            ...p,
-            tags: JSON.parse(p.tags || '[]'),
-            isPinned: !!p.isPinned // Convert 0/1 to boolean
-        }));
+        // Try/Catch for Count Query to handle missing column in WHERE clause if ever used there (less likely but safe)
+        let total = 0;
+        try {
+             const totalResult = await env.DB.prepare(countQuery).bind(...params).first<{total: number}>();
+             total = totalResult?.total || 0;
+        } catch (e) {
+             // If count fails, try removing isPinned from SELECT list in countQuery if it was somehow there,
+             // but here we know countQuery selects count(*). 
+             // If it fails, it might be because 'isPinned' is in the SELECT list of the subquery if we used one.
+             // Here we simple replaced the string.
+             // If the error is "no such column: isPinned" inside the query string (e.g. if we filtered by it), we'd have issues.
+             // But we don't filter by isPinned.
+             // However, just to be safe if the original 'query' has isPinned in SELECT and DB throws error even if not selecting it? No, sqlite is usually fine.
+             // The main issue is the next fetch.
+             console.warn("Count query failed, defaulting total to 0", e);
+        }
 
-        const cacheTime = currentUser ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
-        return jsonResponse({ list, total, page, limit }, 200, cacheTime); 
+        // Fetch Data - Attempt with isPinned sorting
+        try {
+             const finalQuery = query + " ORDER BY isPinned DESC, createdAt DESC LIMIT ? OFFSET ?";
+             const finalParams = [...params, limit, offset];
+             
+             const results = await env.DB.prepare(finalQuery).bind(...finalParams).all<DBPost>();
+             
+             const list = results.results.map(p => ({
+                ...p,
+                tags: JSON.parse(p.tags || '[]'),
+                isPinned: !!p.isPinned 
+            }));
+            
+            const cacheTime = currentUser ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
+            return jsonResponse({ list, total, page, limit }, 200, cacheTime);
+
+        } catch (e) {
+            // FALLBACK: DB migration likely not run (missing isPinned column)
+            // Remove 'isPinned' from the SELECT list
+            let fallbackQuery = query.replace(', isPinned', '');
+            
+            // Use legacy sorting (just createdAt)
+            fallbackQuery += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
+            const finalParams = [...params, limit, offset];
+
+            const results = await env.DB.prepare(fallbackQuery).bind(...finalParams).all<DBPost>();
+            
+            const list = results.results.map(p => ({
+                ...p,
+                tags: JSON.parse(p.tags || '[]'),
+                isPinned: false // Default to false since DB doesn't have it
+            }));
+
+            // Return success with unpinned data
+            return jsonResponse({ list, total, page, limit }, 200, 0);
+        }
       }
     }
 
@@ -608,31 +645,63 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           }
       }
 
-      await env.DB.prepare(`
-        INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status, isPinned)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            title = excluded.title,
-            excerpt = excluded.excerpt,
-            content = excluded.content,
-            tags = excluded.tags,
-            category = excluded.category,
-            url = excluded.url,
-            status = excluded.status,
-            isPinned = excluded.isPinned
-      `).bind(
-        id,
-        body.title,
-        body.excerpt || '',
-        body.content || '',
-        tagsString,
-        body.category || 'Uncategorized',
-        createdAt,
-        body.views || 0,
-        body.url || '',
-        status,
-        isPinned
-      ).run();
+      // Try insert with isPinned
+      try {
+        await env.DB.prepare(`
+            INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status, isPinned)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                excerpt = excluded.excerpt,
+                content = excluded.content,
+                tags = excluded.tags,
+                category = excluded.category,
+                url = excluded.url,
+                status = excluded.status,
+                isPinned = excluded.isPinned
+        `).bind(
+            id,
+            body.title,
+            body.excerpt || '',
+            body.content || '',
+            tagsString,
+            body.category || 'Uncategorized',
+            createdAt,
+            body.views || 0,
+            body.url || '',
+            status,
+            isPinned
+        ).run();
+      } catch (e: any) {
+          // If insert fails due to missing column, try fallback insert without isPinned
+          if (e.message && e.message.includes('column')) {
+               await env.DB.prepare(`
+                INSERT INTO posts (id, title, excerpt, content, tags, category, createdAt, views, url, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    excerpt = excluded.excerpt,
+                    content = excluded.content,
+                    tags = excluded.tags,
+                    category = excluded.category,
+                    url = excluded.url,
+                    status = excluded.status
+            `).bind(
+                id,
+                body.title,
+                body.excerpt || '',
+                body.content || '',
+                tagsString,
+                body.category || 'Uncategorized',
+                createdAt,
+                body.views || 0,
+                body.url || '',
+                status
+            ).run();
+          } else {
+              throw e; // Rethrow other errors
+          }
+      }
 
       return jsonResponse({ id });
     }

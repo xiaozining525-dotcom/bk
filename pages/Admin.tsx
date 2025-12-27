@@ -281,7 +281,8 @@ export const Admin: React.FC = () => {
   };
 
   return (
-    <div className="bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh] relative">
+    // Explicit background colors for light/dark mode transparency
+    <div className="bg-white/60 dark:bg-black/60 backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh] relative">
       
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -593,12 +594,12 @@ export const Admin: React.FC = () => {
             ) : (
                 <>
                 {/* 1. Mobile Card View (Optimized for Crowding & Dark Mode) */}
-                <div className="md:hidden space-y-3">
+                <div className="md:hidden space-y-2">
                     {users.map(u => (
-                        <div key={u.username} className="bg-white/40 dark:bg-black/40 p-3 rounded-xl border border-white/20 dark:border-white/5 shadow-sm relative overflow-hidden backdrop-blur-sm">
+                        <div key={u.username} className="bg-white/40 dark:bg-black/40 p-2.5 rounded-xl border border-white/20 dark:border-white/5 shadow-sm relative overflow-hidden backdrop-blur-sm">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">
+                                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">
                                         {u.username.slice(0, 1)}
                                     </div>
                                     <div>
@@ -613,23 +614,23 @@ export const Admin: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-black/30 p-2 rounded-lg">
+                            <div className="mt-1.5 text-[10px] text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-black/30 p-1.5 rounded-lg">
                                 <span className="text-[10px] text-slate-500 block mb-0.5">权限:</span>
                                 {u.role === 'admin' ? 'all' : u.permissions.join(', ') || '无'}
                             </div>
 
                             {u.role !== 'admin' && (
-                                <div className="mt-3 flex gap-2">
+                                <div className="mt-2.5 flex gap-2">
                                     <button 
                                         onClick={() => openEditUserModal(u)}
-                                        className="flex-1 py-1.5 text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
+                                        className="flex-1 py-1 text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg font-medium"
                                     >
                                         修改权限
                                     </button>
                                     {u.username !== currentUser?.username && (
                                         <button 
                                             onClick={() => handleDeleteUser(u.username)}
-                                            className="flex-1 py-1.5 text-xs bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded-lg font-medium"
+                                            className="flex-1 py-1 text-xs bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded-lg font-medium"
                                         >
                                             删除
                                         </button>
