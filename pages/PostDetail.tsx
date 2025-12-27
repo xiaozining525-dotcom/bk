@@ -7,7 +7,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Helmet } from 'react-helmet-async';
 import { BlogPost, SiteConfig } from '../types';
 import { api } from '../services/api';
-import { ArrowLeft, Calendar, Tag, User, Loader2, Link as LinkIcon, ExternalLink, Clock, FileText, List } from 'lucide-react';
+import { ArrowLeft, Calendar, Tag, User, Loader2, Link as LinkIcon, ExternalLink, Clock, FileText, List, Share2 } from 'lucide-react';
 import { Comments } from '../components/Comments';
 
 // 辅助函数：计算阅读时间和字数
@@ -42,6 +42,7 @@ export const PostDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [stats, setStats] = useState({ wordCount: 0, readingTime: 0 });
   const [headings, setHeadings] = useState<{level: number, text: string, id: string}[]>([]);
+  const [showShareTooltip, setShowShareTooltip] = useState(false);
   
   const navigate = useNavigate();
 
@@ -61,6 +62,30 @@ export const PostDetail: React.FC = () => {
     };
     fetchPost();
   }, [id]);
+
+  const handleShare = async () => {
+    if (!post) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: post.title,
+          text: post.excerpt,
+          url: window.location.href,
+        });
+      } catch (error) {
+        console.log('Error sharing:', error);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setShowShareTooltip(true);
+        setTimeout(() => setShowShareTooltip(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy link:', err);
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -114,16 +139,33 @@ export const PostDetail: React.FC = () => {
                         ))}
                     </div>
 
-                    {post.url && (
-                        <a 
-                          href={post.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md hover:shadow-lg text-sm font-medium group"
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleShare}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition-all shadow-sm hover:shadow-md text-sm font-medium group relative"
+                            title="分享文章"
                         >
-                          <LinkIcon size={16} /> 访问链接 <ExternalLink size={14} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
-                        </a>
-                    )}
+                            <Share2 size={16} />
+                            <span className="hidden sm:inline">分享</span>
+                            
+                            {showShareTooltip && (
+                                <span className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white text-xs py-1.5 px-3 rounded-lg shadow-xl whitespace-nowrap animate-fade-in pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-slate-800">
+                                    链接已复制!
+                                </span>
+                            )}
+                        </button>
+
+                        {post.url && (
+                            <a 
+                              href={post.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md hover:shadow-lg text-sm font-medium group"
+                            >
+                              <LinkIcon size={16} /> <span className="hidden sm:inline">访问链接</span> <ExternalLink size={14} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
