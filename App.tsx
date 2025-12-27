@@ -41,7 +41,18 @@ const App: React.FC = () => {
   };
 
   // 2. Audio/Auth/Config State
-  const [isMuted, setIsMuted] = useState(false);
+  // 修改：从 localStorage 初始化静音状态，实现记忆功能
+  const [isMuted, setIsMuted] = useState(() => {
+    const savedState = localStorage.getItem('blog_audio_muted');
+    // 如果没有存储记录，默认值为 false (尝试自动播放)
+    return savedState !== null ? JSON.parse(savedState) : false;
+  });
+
+  // 新增：监听 isMuted 变化并保存到 localStorage
+  useEffect(() => {
+    localStorage.setItem('blog_audio_muted', JSON.stringify(isMuted));
+  }, [isMuted]);
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isSetupCompleted, setIsSetupCompleted] = useState(true); // Default true to avoid flash
