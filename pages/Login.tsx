@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Lock } from 'lucide-react';
+import { Lock, AlertTriangle } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -33,11 +33,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 turnstileRef.current.innerHTML = '';
                 
                 widgetId.current = window.turnstile.render(turnstileRef.current, {
-                    sitekey: '0x4AAAAAAACET-vXK-qGjXdbv', // 已更新为您截图中的真实 Site Key
+                    sitekey: '0x4AAAAAAACET-vXK-qGjXdbv', // 您的真实 Site Key
                     callback: (t: string) => setToken(t),
                     'error-callback': (err: any) => {
                         console.error('Turnstile Error:', err);
-                        setError('验证组件加载失败，请检查域名配置');
+                        // 400020 错误通常是域名不匹配或请求被拦截
+                        setError('验证组件加载被拦截 (Error 400020)。请尝试关闭广告拦截器或隐私插件后刷新。');
                     },
                     'expired-callback': () => {
                         setError('验证已过期，请重试');
@@ -139,9 +140,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {loading ? '验证中...' : '进入后台'}
           </button>
           {error && (
-            <p className="text-red-500 text-sm text-center animate-bounce">
+            <div className="text-red-500 text-xs text-center animate-bounce flex items-center justify-center gap-1">
+              <AlertTriangle size={12} />
               {error}
-            </p>
+            </div>
           )}
         </form>
       </div>
