@@ -367,6 +367,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const body: any = await request.json();
           if (!body.username || !body.password) return errorResponse("Missing fields");
 
+          const requestedPerms: string[] = body.permissions || [];
+
+          // Security Check: Sub-admins cannot grant 'all' or permissions they don't have
+          if (currentUser.role !== 'admin') {
+              if (requestedPerms.includes('all')) return errorResponse("Permission denied: Cannot grant admin privileges", 403);
+              
+              const userPerms = currentUser.permissions || [];
+              const hasAllRequested = requestedPerms.every(p => userPerms.includes(p));
+              
+              if (!hasAllRequested) {
+                  return errorResponse("Permission denied: Cannot grant permissions you do not possess", 403);
+              }
+          }
+
           try {
             const { hash, salt } = await hashPassword(body.password);
             
@@ -378,7 +392,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                 salt,
                 Date.now(),
                 'editor',
-                JSON.stringify(body.permissions || [])
+                JSON.stringify(requestedPerms)
             ).run();
             
             return jsonResponse({ success: true });
@@ -405,9 +419,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                return errorResponse("Permission denied: You cannot modify a Super Admin.", 403);
           }
 
+          // Security Check: Sub-admins cannot grant 'all' or permissions they don't have
+          const requestedPerms: string[] = body.permissions;
+          if (currentUser.role !== 'admin') {
+              if (requestedPerms.includes('all')) return errorResponse("Permission denied: Cannot grant admin privileges", 403);
+
+              const userPerms = currentUser.permissions || [];
+              const hasAllRequested = requestedPerms.every(p => userPerms.includes(p));
+
+              if (!hasAllRequested) {
+                  return errorResponse("Permission denied: Cannot grant permissions you do not possess", 403);
+              }
+          }
+
           try {
               await env.DB.prepare('UPDATE users SET permissions = ? WHERE username = ?')
-                  .bind(JSON.stringify(body.permissions), body.username)
+                  .bind(JSON.stringify(requestedPerms), body.username)
                   .run();
               return jsonResponse({ success: true });
           } catch (e) {

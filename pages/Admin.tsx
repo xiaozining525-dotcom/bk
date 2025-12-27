@@ -22,6 +22,20 @@ export const Admin: React.FC = () => {
   // Editing User Permissions State
   const [editingUserPerms, setEditingUserPerms] = useState<{username: string, permissions: string[]} | null>(null);
 
+  // Define available permissions logic for UI rendering
+  const PERMISSION_CONFIG = [
+      { 
+          key: 'manage_contents', 
+          label: '内容管理', 
+          desc: '允许创建新文章、查看列表（不可编辑/删除）' 
+      },
+      { 
+          key: 'manage_users', 
+          label: '账号管理', 
+          desc: '允许增加、删除子账号' 
+      }
+  ];
+
   const emptyPost: Partial<BlogPost> = {
     title: '',
     excerpt: '',
@@ -141,8 +155,10 @@ export const Admin: React.FC = () => {
       e.preventDefault();
       if(!newUser.username || !newUser.password) return;
       try {
-          // If no permissions selected, default to 'manage_contents' (create posts)
-          const perms = newUser.permissions.length > 0 ? newUser.permissions : ['manage_contents'];
+          // If no permissions selected, default to 'manage_contents' (create posts) if possible, 
+          // but we should respect user selection. If selection is empty, it sends empty array.
+          // The backend defaults are handled there if needed, but here we just send what is checked.
+          const perms = newUser.permissions; 
           await api.addUser(newUser.username, newUser.password, perms);
           setMessage('用户创建成功');
           setIsAddingUser(false);
@@ -490,28 +506,24 @@ export const Admin: React.FC = () => {
                         <div className="pt-2">
                             <label className="text-sm font-medium mb-2 block">权限分配</label>
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={newUser.permissions.includes('manage_contents')}
-                                        onChange={() => togglePermission('manage_contents')}
-                                    />
-                                    <div>
-                                        <div className="font-bold text-sm">内容管理</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许创建新文章、查看列表（不可编辑/删除）</div>
-                                    </div>
-                                </label>
-                                <label className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={newUser.permissions.includes('manage_users')}
-                                        onChange={() => togglePermission('manage_users')}
-                                    />
-                                    <div>
-                                        <div className="font-bold text-sm">账号管理</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许增加、删除子账号</div>
-                                    </div>
-                                </label>
+                                {PERMISSION_CONFIG.map(perm => {
+                                    // Only show permission option if current user has it (or is admin)
+                                    if (!isAdmin && !currentUser?.permissions.includes(perm.key)) return null;
+                                    
+                                    return (
+                                        <label key={perm.key} className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={newUser.permissions.includes(perm.key)}
+                                                onChange={() => togglePermission(perm.key)}
+                                            />
+                                            <div>
+                                                <div className="font-bold text-sm">{perm.label}</div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">{perm.desc}</div>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -646,57 +658,40 @@ export const Admin: React.FC = () => {
                   </div>
 
                   <div className="space-y-3 mb-8">
-                      <label 
-                        className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
-                            editingUserPerms.permissions.includes('manage_contents') 
-                            ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
-                            : 'bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
-                        }`}
-                      >
-                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${
-                              editingUserPerms.permissions.includes('manage_contents') 
-                              ? 'bg-blue-600 border-blue-600 text-white' 
-                              : 'bg-white border-slate-300'
-                          }`}>
-                              {editingUserPerms.permissions.includes('manage_contents') && <Check size={12} />}
-                          </div>
-                          <input 
-                              type="checkbox" 
-                              className="hidden"
-                              checked={editingUserPerms.permissions.includes('manage_contents')}
-                              onChange={() => toggleEditPermission('manage_contents')}
-                          />
-                          <div>
-                              <div className="font-bold text-sm dark:text-slate-200">内容管理</div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">允许创建新文章、查看列表</div>
-                          </div>
-                      </label>
+                      {PERMISSION_CONFIG.map(perm => {
+                            // Only show permission option if current user has it (or is admin)
+                            if (!isAdmin && !currentUser?.permissions.includes(perm.key)) return null;
 
-                      <label 
-                        className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
-                            editingUserPerms.permissions.includes('manage_users') 
-                            ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
-                            : 'bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
-                        }`}
-                      >
-                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${
-                              editingUserPerms.permissions.includes('manage_users') 
-                              ? 'bg-blue-600 border-blue-600 text-white' 
-                              : 'bg-white border-slate-300'
-                          }`}>
-                              {editingUserPerms.permissions.includes('manage_users') && <Check size={12} />}
-                          </div>
-                          <input 
-                              type="checkbox" 
-                              className="hidden"
-                              checked={editingUserPerms.permissions.includes('manage_users')}
-                              onChange={() => toggleEditPermission('manage_users')}
-                          />
-                          <div>
-                              <div className="font-bold text-sm dark:text-slate-200">账号管理</div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">允许增加、删除子账号</div>
-                          </div>
-                      </label>
+                            const isChecked = editingUserPerms.permissions.includes(perm.key);
+                            return (
+                                <label 
+                                    key={perm.key}
+                                    className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                                        isChecked
+                                        ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
+                                        : 'bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
+                                    }`}
+                                >
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                                        isChecked
+                                        ? 'bg-blue-600 border-blue-600 text-white' 
+                                        : 'bg-white border-slate-300'
+                                    }`}>
+                                        {isChecked && <Check size={12} />}
+                                    </div>
+                                    <input 
+                                        type="checkbox" 
+                                        className="hidden"
+                                        checked={isChecked}
+                                        onChange={() => toggleEditPermission(perm.key)}
+                                    />
+                                    <div>
+                                        <div className="font-bold text-sm dark:text-slate-200">{perm.label}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">{perm.desc}</div>
+                                    </div>
+                                </label>
+                            );
+                      })}
                   </div>
 
                   <div className="flex gap-3">
