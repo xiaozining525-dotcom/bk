@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { BlogPost, PostMetadata, UserProfile } from '../types';
 import { CATEGORIES } from '../constants';
-import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X } from 'lucide-react';
+import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X, Lock } from 'lucide-react';
 
 export const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'posts' | 'users'>('posts');
@@ -34,7 +34,21 @@ export const Admin: React.FC = () => {
   useEffect(() => {
     const user = api.getCurrentUser();
     setCurrentUser(user);
-    loadPosts();
+    
+    // Logic to determine initial tab based on permissions
+    // If user has manage_users BUT NOT manage_contents (and not admin), default to 'users' tab
+    if (user) {
+        const isAdmin = user.role === 'admin';
+        const hasContentPerm = user.permissions?.includes('all') || user.permissions?.includes('manage_contents');
+        const hasUserPerm = user.permissions?.includes('all') || user.permissions?.includes('manage_users');
+
+        if (!isAdmin && !hasContentPerm && hasUserPerm) {
+            setActiveTab('users');
+        } else {
+            // Load posts if they have access to content tab
+            loadPosts();
+        }
+    }
   }, []);
 
   const hasPermission = (perm: string) => {
@@ -44,6 +58,8 @@ export const Admin: React.FC = () => {
       if (currentUser.permissions?.includes('all')) return true;
       return currentUser.permissions?.includes(perm);
   };
+
+  const isAdmin = currentUser?.role === 'admin';
 
   const loadPosts = async () => {
     try {
@@ -90,8 +106,8 @@ export const Admin: React.FC = () => {
       setEditingPost(null);
       loadPosts();
       setTimeout(() => setMessage(''), 2000);
-    } catch (e) {
-      setMessage('保存失败');
+    } catch (e: any) {
+      setMessage(e.message || '保存失败');
     }
   };
 
@@ -100,8 +116,8 @@ export const Admin: React.FC = () => {
     try {
       await api.deletePost(id);
       loadPosts();
-    } catch (e) {
-      alert('删除失败');
+    } catch (e: any) {
+      alert(e.message || '删除失败');
     }
   };
 
@@ -197,31 +213,38 @@ export const Admin: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-800 dark:text-white">后台管理</h1>
             
             {/* Tab Navigation */}
-            {hasPermission('manage_users') && (
-                <div className="flex bg-slate-200/50 dark:bg-white/10 rounded-lg p-1">
+            <div className="flex bg-slate-200/50 dark:bg-white/10 rounded-lg p-1">
+                {/* Only show Posts tab if Admin or has Content Management perm */}
+                {(isAdmin || hasPermission('manage_contents')) && (
                     <button 
                         onClick={() => setActiveTab('posts')}
                         className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'posts' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'}`}
                     >
                         文章管理
                     </button>
+                )}
+                {/* Only show Users tab if Admin or has User Management perm */}
+                {(isAdmin || hasPermission('manage_users')) && (
                     <button 
                         onClick={() => setActiveTab('users')}
                         className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'}`}
                     >
                         账号管理
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
 
         {activeTab === 'posts' && !editingPost && (
-            <button 
-            onClick={() => setEditingPost(emptyPost)}
-            className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition"
-            >
-            <Plus size={18} /> 新建文章
-            </button>
+            // New Post Button: Admin OR Manage Contents
+            (isAdmin || hasPermission('manage_contents')) && (
+                <button 
+                onClick={() => setEditingPost(emptyPost)}
+                className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition"
+                >
+                <Plus size={18} /> 新建文章
+                </button>
+            )
         )}
         
         {activeTab === 'users' && !isAddingUser && hasPermission('manage_users') && (
@@ -371,12 +394,24 @@ export const Admin: React.FC = () => {
                         <td className="py-3 px-2 text-sm text-slate-600 dark:text-slate-400"><span className="bg-white/40 dark:bg-white/10 px-2 py-1 rounded">{post.category}</span></td>
                         <td className="py-3 px-2 text-sm text-slate-500 dark:text-slate-500">{new Date(post.createdAt).toLocaleDateString()}</td>
                         <td className="py-3 px-2 text-right flex justify-end gap-2">
-                            <button onClick={() => handleEditPost(post.id)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
-                                <Edit3 size={16} />
-                            </button>
-                            <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
-                                <Trash2 size={16} />
-                            </button>
+                            {/* EDIT: Only Admin */}
+                            {isAdmin && (
+                                <button onClick={() => handleEditPost(post.id)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
+                                    <Edit3 size={16} />
+                                </button>
+                            )}
+                            {/* DELETE: Only Admin */}
+                            {isAdmin && (
+                                <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+                            {/* If not admin, show lock icon or nothing */}
+                            {!isAdmin && (
+                                <div className="p-2 text-slate-300 cursor-not-allowed">
+                                    <Lock size={16} />
+                                </div>
+                            )}
                         </td>
                         </tr>
                     ))}
@@ -426,7 +461,7 @@ export const Admin: React.FC = () => {
                                     />
                                     <div>
                                         <div className="font-bold text-sm">内容管理</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许创建、编辑、删除文章</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许创建新文章、查看列表（不可编辑/删除）</div>
                                     </div>
                                 </label>
                                 <label className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">

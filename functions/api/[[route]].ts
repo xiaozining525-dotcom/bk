@@ -154,17 +154,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const username = await env.BLOG_KV.get(`${SESSION_PREFIX}${token}`);
     
     if (!username) return null;
-    // Compatibility: If older sessions stored just "valid", we can't map to a user easily.
-    // We assume new sessions store the username.
-    // If it equals 'valid' (legacy), we might need to handle it or force relogin.
-    // For now, let's assume we store username in session value.
-
+    
     const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
     if (!users) return null;
 
     if (username === 'valid') {
         // Fallback for legacy admin
-        // Legacy admins might not have 'role' property set in KV, default to admin.
         const found = users.find(u => u.role === 'admin' || !u.role);
         return found ? { ...found, role: 'admin', permissions: ['all'] } : null;
     }
@@ -312,7 +307,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return errorResponse('Invalid credentials', 401);
   }
 
-  // 5. User Management (NEW)
+  // 5. User Management
   if (path === 'users') {
       const currentUser = await getAuthenticatedUser();
       if (!currentUser) return errorResponse('Unauthorized', 401);
@@ -325,10 +320,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
       // GET Users List
       if (request.method === 'GET') {
-          // Return list without password hashes/salts
           const safeUsers = users.map(u => ({
               username: u.username,
-              // FIX: Default to 'admin' if role is missing
               role: u.role || 'admin',
               permissions: u.permissions || ['all'],
               createdAt: u.createdAt
@@ -352,7 +345,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               passwordHash: hash,
               salt: salt,
               createdAt: Date.now(),
-              role: 'editor', // Sub-accounts are editors by default
+              role: 'editor',
               permissions: body.permissions || [] 
           };
 
@@ -368,11 +361,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (targetUsername === currentUser.username) return errorResponse("Cannot delete yourself");
 
           const targetUser = users.find(u => u.username === targetUsername);
-          // Check role safely
           const targetUserRole = targetUser?.role || 'admin'; 
           
-          // Prevent deleting the last admin
-          // Count admins (treating missing role as admin)
           const adminCount = users.filter(u => (u.role || 'admin') === 'admin').length;
 
           if (targetUserRole === 'admin' && adminCount <= 1) {
@@ -402,10 +392,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         // Draft Protection
         if (fullPost.status === 'draft') {
             if (!currentUser) return errorResponse('Unauthorized: Draft', 403);
-            // Any logged in user can view drafts for now, or restrict if needed
         }
         
-        // Update views logic (omitted for brevity, same as before)
         const metaList = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
         const idx = metaList.findIndex(p => p.id === id);
         if (idx !== -1) {
@@ -417,8 +405,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
         return jsonResponse(postData, 200, 60);
       } else {
-        // ... Pagination & Filtering (same as before) ...
-        // Filter: Status
+        // ... Pagination & Filtering ...
         const page = parseInt(url.searchParams.get('page') || '1');
         const limit = parseInt(url.searchParams.get('limit') || '10');
         const search = (url.searchParams.get('search') || '').toLowerCase();
@@ -449,14 +436,32 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST (Protected - Write)
     if (request.method === 'POST') {
       if (!currentUser) return errorResponse('Unauthorized', 401);
-      if (!hasPermission(currentUser, 'manage_contents')) {
-          return errorResponse('Permission denied', 403);
-      }
       
       const body: any = await request.json();
       if (!body.title) return errorResponse('Missing title');
 
-      if (!body.id) body.id = crypto.randomUUID();
+      // Check if post exists to determine if it's CREATE or UPDATE
+      // NOTE: Frontend usually sends a fresh UUID for new posts, so this check works.
+      // If client sends an ID that exists in KV, it's an update.
+      let existingPost = null;
+      if (body.id) {
+          existingPost = await env.BLOG_KV.get(`post:${body.id}`);
+      }
+
+      if (existingPost) {
+          // UPDATE: STRICT ADMIN ONLY
+          if (currentUser.role !== 'admin') {
+              return errorResponse('Permission denied: Only Main Admin can edit existing articles.', 403);
+          }
+      } else {
+          // CREATE: Admin OR manage_contents permission
+          if (currentUser.role !== 'admin' && !hasPermission(currentUser, 'manage_contents')) {
+              return errorResponse('Permission denied: You cannot create articles.', 403);
+          }
+          // Ensure ID is set for new post if not provided (though Admin.tsx provides it)
+          if (!body.id) body.id = crypto.randomUUID();
+      }
+
       if (!body.createdAt) body.createdAt = Date.now();
       if (!body.status) body.status = 'draft'; 
 
@@ -491,8 +496,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // DELETE (Protected - Write)
     if (request.method === 'DELETE') {
       if (!currentUser) return errorResponse('Unauthorized', 401);
-      if (!hasPermission(currentUser, 'manage_contents')) {
-          return errorResponse('Permission denied', 403);
+      
+      // DELETE: STRICT ADMIN ONLY
+      if (currentUser.role !== 'admin') {
+          return errorResponse('Permission denied: Only Main Admin can delete articles.', 403);
       }
       
       const id = url.searchParams.get('id');
