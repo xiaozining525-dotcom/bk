@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Lock, AlertTriangle } from 'lucide-react';
+import { Lock, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -18,6 +18,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
   const navigate = useNavigate();
@@ -27,18 +28,28 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     let intervalId: any = null;
 
     const renderWidget = () => {
-        if (window.turnstile && turnstileRef.current && !widgetId.current) {
+        if (window.turnstile && turnstileRef.current) {
+            // If widget already exists, remove it first
+            if (widgetId.current) {
+                try {
+                    window.turnstile.remove(widgetId.current);
+                } catch(e) {}
+                widgetId.current = null;
+            }
+
             try {
-                // Clear any existing content to prevent duplicates
+                // Clear any existing content
                 turnstileRef.current.innerHTML = '';
                 
                 widgetId.current = window.turnstile.render(turnstileRef.current, {
                     sitekey: '0x4AAAAAAACET-vXK-qGjXdbv', // 您的真实 Site Key
-                    callback: (t: string) => setToken(t),
+                    callback: (t: string) => {
+                        setToken(t);
+                        setError(''); // Clear error on success
+                    },
                     'error-callback': (err: any) => {
                         console.error('Turnstile Error:', err);
-                        // 400020 错误通常是域名不匹配或请求被拦截
-                        setError('验证组件加载被拦截 (Error 400020)。请尝试关闭广告拦截器或隐私插件后刷新。');
+                        setError('验证组件加载失败 (Error 400020)。');
                     },
                     'expired-callback': () => {
                         setError('验证已过期，请重试');
@@ -74,14 +85,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
              widgetId.current = null;
         }
     };
-  }, []);
+  }, [retryCount]); // Re-run when retryCount changes
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (!token) {
-        setError('请完成人机验证');
+        setError('请先完成人机验证');
         return;
     }
 
@@ -94,6 +105,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         navigate('/admin');
       } else {
         setError('密码错误或验证过期');
+        // Reset widget on failure
         if (window.turnstile && widgetId.current) {
             window.turnstile.reset(widgetId.current);
             setToken('');
@@ -128,8 +140,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
           
           {/* Turnstile Container */}
-          <div className="flex justify-center min-h-[65px]">
+          <div className="flex flex-col items-center justify-center min-h-[65px] gap-2">
             <div ref={turnstileRef} className="w-full flex justify-center"></div>
+            {error.includes('400020') && (
+                <button 
+                    type="button" 
+                    onClick={() => setRetryCount(c => c + 1)}
+                    className="text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                    <RefreshCw size={12} /> 重新加载验证码
+                </button>
+            )}
           </div>
 
           <button
@@ -140,9 +161,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {loading ? '验证中...' : '进入后台'}
           </button>
           {error && (
-            <div className="text-red-500 text-xs text-center animate-bounce flex items-center justify-center gap-1">
-              <AlertTriangle size={12} />
-              {error}
+            <div className="text-red-500 text-xs text-center animate-bounce flex flex-col items-center gap-1">
+              <div className="flex items-center gap-1">
+                <AlertTriangle size={12} />
+                <span>{error}</span>
+              </div>
+              {error.includes('400020') && (
+                  <span className="text-[10px] opacity-75">请关闭广告拦截插件或检查 Cloudflare 域名配置</span>
+              )}
             </div>
           )}
         </form>
