@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Search, PenTool, User, Home, LogOut, Menu, X, Sun, Moon, LayoutDashboard, Volume2, VolumeX, ArrowUp } from 'lucide-react';
 import { BackgroundVideo } from './BackgroundVideo';
@@ -27,15 +27,34 @@ export const Layout: React.FC<LayoutProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showNavbar, setShowNavbar] = useState(true);
+  
+  // 使用 ref 记录上一次的滚动位置，避免在 useEffect 依赖中引入不必要的状态更新
+  const lastScrollY = useRef(0);
 
-  // 监听滚动以控制“回到顶部”按钮的显示
+  // 监听滚动以控制“回到顶部”按钮和“导航栏”的显示
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 300) {
+      const currentScrollY = window.scrollY;
+
+      // 1. 控制回到顶部按钮
+      if (currentScrollY > 300) {
         setShowScrollTop(true);
       } else {
         setShowScrollTop(false);
       }
+
+      // 2. 控制顶部导航栏 (下滑隐藏，上滑显示)
+      // 只有当滚动超过一定距离(比如60px)才开始执行隐藏逻辑，避免顶部轻微晃动
+      if (currentScrollY < lastScrollY.current || currentScrollY < 60) {
+        // 向上滚动 或 在页面顶部 -> 显示
+        setShowNavbar(true);
+      } else if (currentScrollY > lastScrollY.current && currentScrollY > 60) {
+        // 向下滚动 且 超过阈值 -> 隐藏
+        setShowNavbar(false);
+      }
+
+      lastScrollY.current = currentScrollY;
     };
 
     window.addEventListener('scroll', handleScroll);
@@ -78,7 +97,11 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {/* Top Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-40 transition-all duration-300">
+      <nav 
+        className={`fixed top-0 left-0 right-0 z-40 transition-transform duration-300 ease-in-out ${
+            showNavbar ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
           <div className="backdrop-filter backdrop-blur-md bg-glass border border-glassBorder rounded-2xl shadow-lg px-6 py-3 flex items-center justify-between">
             
