@@ -33,11 +33,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 turnstileRef.current.innerHTML = '';
                 
                 widgetId.current = window.turnstile.render(turnstileRef.current, {
-                    sitekey: '0x4AAAAAAA-GKwE4_y_5z5t2', // Replace with your REAL Site Key for production
+                    sitekey: '0x4AAAAAAACET-vXK-qGjXdbv', // 已更新为您截图中的真实 Site Key
                     callback: (t: string) => setToken(t),
                     'error-callback': (err: any) => {
                         console.error('Turnstile Error:', err);
-                        setError('验证组件加载失败，请检查 Site Key 配置');
+                        setError('验证组件加载失败，请检查域名配置');
                     },
                     'expired-callback': () => {
                         setError('验证已过期，请重试');
@@ -126,7 +126,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
           </div>
           
-          {/* Turnstile Container - Removed 'cf-turnstile' class to avoid auto-render conflict */}
+          {/* Turnstile Container */}
           <div className="flex justify-center min-h-[65px]">
             <div ref={turnstileRef} className="w-full flex justify-center"></div>
           </div>
