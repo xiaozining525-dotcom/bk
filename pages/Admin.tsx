@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { BlogPost, PostMetadata } from '../types';
+import { BlogPost, PostMetadata, UserProfile } from '../types';
 import { CATEGORIES } from '../constants';
-import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle } from 'lucide-react';
+import { Save, Trash2, Plus, Edit3, UploadCloud, FileText, CheckCircle, Users, UserPlus, Shield, X } from 'lucide-react';
 
 export const Admin: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'posts' | 'users'>('posts');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  // Posts State
   const [posts, setPosts] = useState<PostMetadata[]>([]);
   const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
   const [message, setMessage] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+
+  // Users State
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', password: '', permissions: [] as string[] });
 
   const emptyPost: Partial<BlogPost> = {
     title: '',
@@ -18,16 +27,25 @@ export const Admin: React.FC = () => {
     tags: [],
     url: '',
     id: '',
-    status: 'draft', // Default to draft
+    status: 'draft',
+    createdAt: Date.now()
   };
 
   useEffect(() => {
+    const user = api.getCurrentUser();
+    setCurrentUser(user);
     loadPosts();
   }, []);
 
+  const hasPermission = (perm: string) => {
+      if (!currentUser) return false;
+      if (currentUser.role === 'admin') return true;
+      if (currentUser.permissions.includes('all')) return true;
+      return currentUser.permissions.includes(perm);
+  };
+
   const loadPosts = async () => {
     try {
-      // Fetch posts (Admin sees all including drafts)
       const data = await api.getPosts(1, 100);
       setPosts(data.list); 
     } catch (e) {
@@ -35,7 +53,25 @@ export const Admin: React.FC = () => {
     }
   };
 
-  const handleSave = async (statusOverride?: 'published' | 'draft') => {
+  const loadUsers = async () => {
+      try {
+          const list = await api.getUsers();
+          setUsers(list);
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+  // Switch tabs and load data if needed
+  useEffect(() => {
+      if (activeTab === 'users' && hasPermission('manage_users')) {
+          loadUsers();
+      }
+  }, [activeTab]);
+
+  // --- Post Handlers ---
+
+  const handleSavePost = async (statusOverride?: 'published' | 'draft') => {
     if (!editingPost?.title || !editingPost?.content) return;
     
     try {
@@ -58,7 +94,7 @@ export const Admin: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeletePost = async (id: string) => {
     if (!confirm('确定删除这篇文章吗？')) return;
     try {
       await api.deletePost(id);
@@ -68,7 +104,7 @@ export const Admin: React.FC = () => {
     }
   };
 
-  const handleEdit = async (id: string) => {
+  const handleEditPost = async (id: string) => {
     try {
         setMessage('加载中...');
         const post = await api.getPost(id);
@@ -77,6 +113,43 @@ export const Admin: React.FC = () => {
     } catch (e) {
         setMessage('加载详情失败');
     }
+  };
+
+  // --- User Handlers ---
+
+  const handleAddUser = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if(!newUser.username || !newUser.password) return;
+      try {
+          // If no permissions selected, default to 'manage_contents' (create posts)
+          const perms = newUser.permissions.length > 0 ? newUser.permissions : ['manage_contents'];
+          await api.addUser(newUser.username, newUser.password, perms);
+          setMessage('用户创建成功');
+          setIsAddingUser(false);
+          setNewUser({ username: '', password: '', permissions: [] });
+          loadUsers();
+          setTimeout(() => setMessage(''), 2000);
+      } catch(e: any) {
+          alert(e.message || '创建失败');
+      }
+  };
+
+  const handleDeleteUser = async (username: string) => {
+      if (!confirm(`确定删除用户 ${username} 吗?`)) return;
+      try {
+          await api.deleteUser(username);
+          loadUsers();
+      } catch (e) {
+          alert('删除失败');
+      }
+  };
+
+  const togglePermission = (perm: string) => {
+      setNewUser(prev => {
+          const exists = prev.permissions.includes(perm);
+          if (exists) return { ...prev, permissions: prev.permissions.filter(p => p !== perm) };
+          return { ...prev, permissions: [...prev.permissions, perm] };
+      });
   };
 
   // --- Drag and Drop Handlers ---
@@ -97,7 +170,6 @@ export const Admin: React.FC = () => {
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      // Only verify extension simply
       if (file.name.endsWith('.md') || file.name.endsWith('.txt')) {
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -117,162 +189,312 @@ export const Admin: React.FC = () => {
 
   return (
     <div className="bg-glass backdrop-blur-md border border-glassBorder rounded-3xl p-6 md:p-10 shadow-lg min-h-[80vh]">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">博客管理</h1>
-        <button 
-          onClick={() => setEditingPost(emptyPost)}
-          className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition"
-        >
-          <Plus size={18} /> 新建文章
-        </button>
+      
+      {/* Header & Tabs */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div className="flex items-center gap-6">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">后台管理</h1>
+            
+            {/* Tab Navigation */}
+            {hasPermission('manage_users') && (
+                <div className="flex bg-slate-200/50 dark:bg-white/10 rounded-lg p-1">
+                    <button 
+                        onClick={() => setActiveTab('posts')}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'posts' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'}`}
+                    >
+                        文章管理
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('users')}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'}`}
+                    >
+                        账号管理
+                    </button>
+                </div>
+            )}
+        </div>
+
+        {activeTab === 'posts' && !editingPost && (
+            <button 
+            onClick={() => setEditingPost(emptyPost)}
+            className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-700 transition"
+            >
+            <Plus size={18} /> 新建文章
+            </button>
+        )}
+        
+        {activeTab === 'users' && !isAddingUser && hasPermission('manage_users') && (
+             <button 
+             onClick={() => setIsAddingUser(true)}
+             className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"
+             >
+             <UserPlus size={18} /> 添加账号
+             </button>
+        )}
       </div>
 
       {message && <div className="mb-4 p-3 bg-blue-100/80 text-blue-800 rounded-lg text-sm text-center font-medium">{message}</div>}
 
-      {editingPost ? (
-        <div className="space-y-4 animate-fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              type="text"
-              placeholder="文章标题"
-              className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-300 outline-none dark:text-white"
-              value={editingPost.title}
-              onChange={e => setEditingPost({...editingPost, title: e.target.value})}
-            />
-            <div className="flex gap-2">
-                <select
-                className="flex-1 p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
-                value={editingPost.category}
-                onChange={e => setEditingPost({...editingPost, category: e.target.value})}
-                >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select
-                className={`w-32 p-3 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white ${editingPost.status === 'published' ? 'bg-green-100/50 dark:bg-green-900/30' : 'bg-orange-100/50 dark:bg-orange-900/30'}`}
-                value={editingPost.status || 'draft'}
-                onChange={e => setEditingPost({...editingPost, status: e.target.value as any})}
-                >
-                    <option value="draft">草稿</option>
-                    <option value="published">已发布</option>
-                </select>
-            </div>
-          </div>
-          
-          <input
-            type="text"
-            placeholder="相关链接 (URL) - 可选"
-            className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none font-mono text-sm text-slate-600 dark:text-slate-300"
-            value={editingPost.url || ''}
-            onChange={e => setEditingPost({...editingPost, url: e.target.value})}
-          />
-          
-          <input
-            type="text"
-            placeholder="摘要 (用于列表展示)"
-            className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
-            value={editingPost.excerpt}
-            onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})}
-          />
-          
-          <input
-            type="text"
-            placeholder="标签 (逗号分隔)"
-            className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
-            value={editingPost.tags?.join(',')}
-            onChange={e => setEditingPost({...editingPost, tags: e.target.value.split(',').map(t=>t.trim())})}
-          />
-
-          <div className="relative">
-            <textarea
-              placeholder="Markdown 正文内容... (支持拖拽 .md/.txt 文件上传)"
-              className={`w-full h-96 p-4 bg-white/50 dark:bg-black/30 border rounded-xl outline-none font-mono text-sm transition-all dark:text-slate-200 ${
-                isDragging 
-                  ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-blue-300' 
-                  : 'border-white/50 dark:border-white/10'
-              }`}
-              value={editingPost.content}
-              onChange={e => setEditingPost({...editingPost, content: e.target.value})}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            />
-            {isDragging && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="bg-blue-500/80 text-white px-4 py-2 rounded-lg flex items-center gap-2 backdrop-blur-sm shadow-lg">
-                        <UploadCloud size={20} /> 释放以上传文件内容
+      {/* --- POSTS VIEW --- */}
+      {activeTab === 'posts' && (
+        <>
+            {editingPost ? (
+                <div className="space-y-4 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                    type="text"
+                    placeholder="文章标题"
+                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-300 outline-none dark:text-white"
+                    value={editingPost.title}
+                    onChange={e => setEditingPost({...editingPost, title: e.target.value})}
+                    />
+                    <div className="flex gap-2">
+                        <select
+                        className="flex-1 p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                        value={editingPost.category}
+                        onChange={e => setEditingPost({...editingPost, category: e.target.value})}
+                        >
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select
+                        className={`w-32 p-3 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white ${editingPost.status === 'published' ? 'bg-green-100/50 dark:bg-green-900/30' : 'bg-orange-100/50 dark:bg-orange-900/30'}`}
+                        value={editingPost.status || 'draft'}
+                        onChange={e => setEditingPost({...editingPost, status: e.target.value as any})}
+                        >
+                            <option value="draft">草稿</option>
+                            <option value="published">已发布</option>
+                        </select>
                     </div>
                 </div>
-            )}
-          </div>
+                
+                <input
+                    type="text"
+                    placeholder="相关链接 (URL) - 可选"
+                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none font-mono text-sm text-slate-600 dark:text-slate-300"
+                    value={editingPost.url || ''}
+                    onChange={e => setEditingPost({...editingPost, url: e.target.value})}
+                />
+                
+                <input
+                    type="text"
+                    placeholder="摘要 (用于列表展示)"
+                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                    value={editingPost.excerpt}
+                    onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})}
+                />
+                
+                <input
+                    type="text"
+                    placeholder="标签 (逗号分隔)"
+                    className="w-full p-3 bg-white/50 dark:bg-black/30 border border-white/50 dark:border-white/10 rounded-xl outline-none dark:text-white"
+                    value={editingPost.tags?.join(',')}
+                    onChange={e => setEditingPost({...editingPost, tags: e.target.value.split(',').map(t=>t.trim())})}
+                />
 
-          <div className="flex gap-4 pt-2">
-            <button 
-                onClick={() => handleSave('draft')} 
-                className="flex-1 bg-slate-500 text-white py-3 rounded-xl hover:bg-slate-600 transition flex justify-center items-center gap-2 font-medium"
-            >
-                <FileText size={18} /> 存为草稿
-            </button>
-            <button 
-                onClick={() => handleSave('published')} 
-                className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition flex justify-center items-center gap-2 font-medium"
-            >
-                <Save size={18} /> 发布上线
-            </button>
-            <button 
-                onClick={() => setEditingPost(null)} 
-                className="px-6 py-3 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition"
-            >
-                取消
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
-                <th className="py-3 px-2">状态</th>
-                <th className="py-3 px-2">标题</th>
-                <th className="py-3 px-2">分类</th>
-                <th className="py-3 px-2">发布时间</th>
-                <th className="py-3 px-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {posts.map(post => (
-                <tr key={post.id} className="border-b border-slate-100/30 dark:border-white/5 hover:bg-white/30 dark:hover:bg-white/5 transition">
-                  <td className="py-3 px-2">
-                    {post.status === 'published' ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100/50 text-green-700 text-xs font-bold border border-green-200/50">
-                            <CheckCircle size={10} className="mr-1"/> 已发布
-                        </span>
-                    ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-200/50 text-slate-600 text-xs font-bold border border-slate-300/50">
-                            <FileText size={10} className="mr-1"/> 草稿
-                        </span>
+                <div className="relative">
+                    <textarea
+                    placeholder="Markdown 正文内容... (支持拖拽 .md/.txt 文件上传)"
+                    className={`w-full h-96 p-4 bg-white/50 dark:bg-black/30 border rounded-xl outline-none font-mono text-sm transition-all dark:text-slate-200 ${
+                        isDragging 
+                        ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-blue-300' 
+                        : 'border-white/50 dark:border-white/10'
+                    }`}
+                    value={editingPost.content}
+                    onChange={e => setEditingPost({...editingPost, content: e.target.value})}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    />
+                    {isDragging && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="bg-blue-500/80 text-white px-4 py-2 rounded-lg flex items-center gap-2 backdrop-blur-sm shadow-lg">
+                                <UploadCloud size={20} /> 释放以上传文件内容
+                            </div>
+                        </div>
                     )}
-                  </td>
-                  <td className="py-3 px-2 font-medium text-slate-800 dark:text-slate-200">
-                    <div className="flex flex-col">
-                        <span>{post.title}</span>
-                        {post.url && <span className="text-[10px] text-blue-500 truncate max-w-[200px]">{post.url}</span>}
-                    </div>
-                  </td>
-                  <td className="py-3 px-2 text-sm text-slate-600 dark:text-slate-400"><span className="bg-white/40 dark:bg-white/10 px-2 py-1 rounded">{post.category}</span></td>
-                  <td className="py-3 px-2 text-sm text-slate-500 dark:text-slate-500">{new Date(post.createdAt).toLocaleDateString()}</td>
-                  <td className="py-3 px-2 text-right flex justify-end gap-2">
-                    <button onClick={() => handleEdit(post.id)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
-                        <Edit3 size={16} />
+                </div>
+
+                <div className="flex gap-4 pt-2">
+                    <button 
+                        onClick={() => handleSavePost('draft')} 
+                        className="flex-1 bg-slate-500 text-white py-3 rounded-xl hover:bg-slate-600 transition flex justify-center items-center gap-2 font-medium"
+                    >
+                        <FileText size={18} /> 存为草稿
                     </button>
-                    <button onClick={() => handleDelete(post.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
-                        <Trash2 size={16} />
+                    <button 
+                        onClick={() => handleSavePost('published')} 
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition flex justify-center items-center gap-2 font-medium"
+                    >
+                        <Save size={18} /> 发布上线
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <button 
+                        onClick={() => setEditingPost(null)} 
+                        className="px-6 py-3 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition"
+                    >
+                        取消
+                    </button>
+                </div>
+                </div>
+            ) : (
+                <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                    <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
+                        <th className="py-3 px-2">状态</th>
+                        <th className="py-3 px-2">标题</th>
+                        <th className="py-3 px-2">分类</th>
+                        <th className="py-3 px-2">发布时间</th>
+                        <th className="py-3 px-2 text-right">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {posts.map(post => (
+                        <tr key={post.id} className="border-b border-slate-100/30 dark:border-white/5 hover:bg-white/30 dark:hover:bg-white/5 transition">
+                        <td className="py-3 px-2">
+                            {post.status === 'published' ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100/50 text-green-700 text-xs font-bold border border-green-200/50">
+                                    <CheckCircle size={10} className="mr-1"/> 已发布
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-200/50 text-slate-600 text-xs font-bold border border-slate-300/50">
+                                    <FileText size={10} className="mr-1"/> 草稿
+                                </span>
+                            )}
+                        </td>
+                        <td className="py-3 px-2 font-medium text-slate-800 dark:text-slate-200">
+                            <div className="flex flex-col">
+                                <span>{post.title}</span>
+                                {post.url && <span className="text-[10px] text-blue-500 truncate max-w-[200px]">{post.url}</span>}
+                            </div>
+                        </td>
+                        <td className="py-3 px-2 text-sm text-slate-600 dark:text-slate-400"><span className="bg-white/40 dark:bg-white/10 px-2 py-1 rounded">{post.category}</span></td>
+                        <td className="py-3 px-2 text-sm text-slate-500 dark:text-slate-500">{new Date(post.createdAt).toLocaleDateString()}</td>
+                        <td className="py-3 px-2 text-right flex justify-end gap-2">
+                            <button onClick={() => handleEditPost(post.id)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
+                                <Edit3 size={16} />
+                            </button>
+                            <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                                <Trash2 size={16} />
+                            </button>
+                        </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+                </div>
+            )}
+        </>
+      )}
+
+      {/* --- USERS VIEW --- */}
+      {activeTab === 'users' && hasPermission('manage_users') && (
+          <>
+            {isAddingUser ? (
+                <div className="max-w-md mx-auto bg-white/40 dark:bg-white/5 p-6 rounded-2xl border border-white/20 animate-fade-in">
+                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><UserPlus size={20} /> 添加子账号</h3>
+                    <form onSubmit={handleAddUser} className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium mb-1 block">用户名</label>
+                            <input 
+                                type="text" 
+                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-black/30 border border-white/30 outline-none"
+                                value={newUser.username}
+                                onChange={e => setNewUser({...newUser, username: e.target.value})}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium mb-1 block">密码</label>
+                            <input 
+                                type="password" 
+                                className="w-full p-2 rounded-lg bg-white/50 dark:bg-black/30 border border-white/30 outline-none"
+                                value={newUser.password}
+                                onChange={e => setNewUser({...newUser, password: e.target.value})}
+                                required
+                            />
+                        </div>
+                        
+                        <div className="pt-2">
+                            <label className="text-sm font-medium mb-2 block">权限分配</label>
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={newUser.permissions.includes('manage_contents')}
+                                        onChange={() => togglePermission('manage_contents')}
+                                    />
+                                    <div>
+                                        <div className="font-bold text-sm">内容管理</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许创建、编辑、删除文章</div>
+                                    </div>
+                                </label>
+                                <label className="flex items-center gap-2 p-3 rounded-lg border border-white/20 bg-white/30 dark:bg-black/20 cursor-pointer hover:bg-white/40">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={newUser.permissions.includes('manage_users')}
+                                        onChange={() => togglePermission('manage_users')}
+                                    />
+                                    <div>
+                                        <div className="font-bold text-sm">账号管理</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">允许增加、删除子账号</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-4">
+                            <button type="button" onClick={() => setIsAddingUser(false)} className="flex-1 py-2 bg-slate-200 dark:bg-slate-700 rounded-lg">取消</button>
+                            <button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded-lg">创建</button>
+                        </div>
+                    </form>
+                </div>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200/50 dark:border-white/10">
+                                <th className="py-3 px-2">角色</th>
+                                <th className="py-3 px-2">用户名</th>
+                                <th className="py-3 px-2">权限</th>
+                                <th className="py-3 px-2">创建时间</th>
+                                <th className="py-3 px-2 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map(u => (
+                                <tr key={u.username} className="border-b border-slate-100/30 dark:border-white/5 hover:bg-white/30 dark:hover:bg-white/5">
+                                    <td className="py-3 px-2">
+                                        {u.role === 'admin' ? (
+                                             <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-bold">超级管理员</span>
+                                        ) : (
+                                            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs">子账号</span>
+                                        )}
+                                    </td>
+                                    <td className="py-3 px-2 font-medium">{u.username}</td>
+                                    <td className="py-3 px-2 text-xs text-slate-500">
+                                        {u.role === 'admin' ? '全部权限' : u.permissions.join(', ') || '无'}
+                                    </td>
+                                    <td className="py-3 px-2 text-sm text-slate-500">
+                                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
+                                    </td>
+                                    <td className="py-3 px-2 text-right">
+                                        {u.role !== 'admin' && u.username !== currentUser?.username && (
+                                            <button 
+                                                onClick={() => handleDeleteUser(u.username)}
+                                                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                                title="删除用户"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+          </>
       )}
     </div>
   );

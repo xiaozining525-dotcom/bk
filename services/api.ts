@@ -1,5 +1,5 @@
-import { ApiResponse, BlogPost, PostMetadata, SiteConfig, PaginatedResponse, SetupStatus } from '../types';
-import { API_BASE, ADMIN_TOKEN_KEY } from '../constants';
+import { ApiResponse, BlogPost, PostMetadata, SiteConfig, PaginatedResponse, SetupStatus, UserProfile } from '../types';
+import { API_BASE, ADMIN_TOKEN_KEY, USER_INFO_KEY } from '../constants';
 
 const getHeaders = () => {
   const token = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -111,9 +111,45 @@ export const api = {
     });
     const json = await res.json();
     if (json.success && json.data?.token) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, json.data.token); 
+      localStorage.setItem(ADMIN_TOKEN_KEY, json.data.token);
+      if (json.data.user) {
+          localStorage.setItem(USER_INFO_KEY, JSON.stringify(json.data.user));
+      }
       return true;
     }
     return false;
+  },
+
+  // --- User Management ---
+
+  async getUsers(): Promise<UserProfile[]> {
+      const res = await fetch(`${API_BASE}/users`, { headers: getHeaders() });
+      const json: ApiResponse<UserProfile[]> = await res.json();
+      if (!json.success) throw new Error(json.error);
+      return json.data || [];
+  },
+
+  async addUser(username: string, password: string, permissions: string[]): Promise<void> {
+      const res = await fetch(`${API_BASE}/users`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ username, password, permissions })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+  },
+
+  async deleteUser(username: string): Promise<void> {
+      const res = await fetch(`${API_BASE}/users?username=${username}`, {
+          method: 'DELETE',
+          headers: getHeaders()
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+  },
+  
+  getCurrentUser(): UserProfile | null {
+      const str = localStorage.getItem(USER_INFO_KEY);
+      return str ? JSON.parse(str) : null;
   }
 };

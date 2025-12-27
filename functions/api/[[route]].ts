@@ -5,6 +5,7 @@
  * - Session-based Authentication (Secure)
  * - PBKDF2 Password Hashing
  * - One-time Registration System
+ * - Role Based Access Control (RBAC)
  */
 
 // Define Cloudflare Workers types
@@ -33,7 +34,6 @@ type PagesFunction<Env = unknown, P extends string = string, Data = unknown> = (
 
 interface Env {
   BLOG_KV: KVNamespace;
-  // ADMIN_PASSWORD is deprecated in favor of KV users
   BACKGROUND_VIDEO_URL?: string;
   BACKGROUND_MUSIC_URL?: string;
   AVATAR_URL?: string;
@@ -57,6 +57,8 @@ interface User {
     passwordHash: string;
     salt: string;
     createdAt: number;
+    role: 'admin' | 'editor';
+    permissions: string[];
 }
 
 const CORS_HEADERS = {
@@ -75,28 +77,21 @@ const DEFAULT_AVATAR = "https://picsum.photos/300/300";
 
 // --- Crypto Helpers ---
 
-// Convert ArrayBuffer to Hex String
 function buf2hex(buffer: ArrayBuffer) {
     return [...new Uint8Array(buffer)]
         .map(x => x.toString(16).padStart(2, '0'))
         .join('');
 }
 
-// Convert Hex String to Uint8Array
 function hex2buf(hexString: string) {
     return new Uint8Array(hexString.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 }
 
-// Hash password using PBKDF2
 async function hashPassword(password: string, salt: Uint8Array | null = null) {
     const enc = new TextEncoder();
-    
-    // 1. Generate or use salt
     if (!salt) {
         salt = crypto.getRandomValues(new Uint8Array(16));
     }
-
-    // 2. Import password
     const keyMaterial = await crypto.subtle.importKey(
         "raw", 
         enc.encode(password), 
@@ -104,8 +99,6 @@ async function hashPassword(password: string, salt: Uint8Array | null = null) {
         false, 
         ["deriveBits", "deriveKey"]
     );
-
-    // 3. Derive key
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: "PBKDF2",
@@ -116,7 +109,6 @@ async function hashPassword(password: string, salt: Uint8Array | null = null) {
         keyMaterial,
         256
     );
-
     return {
         hash: buf2hex(derivedBits),
         salt: buf2hex(salt)
@@ -154,12 +146,28 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   const getIp = () => request.headers.get('CF-Connecting-IP') || 'unknown';
 
-  const checkAuth = async (): Promise<boolean> => {
+  // Return the full user object if valid, else null
+  const getAuthenticatedUser = async (): Promise<User | null> => {
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return false;
+    if (!authHeader) return null;
     const token = authHeader.replace('Bearer ', '');
-    const valid = await env.BLOG_KV.get(`${SESSION_PREFIX}${token}`);
-    return valid === 'valid';
+    const username = await env.BLOG_KV.get(`${SESSION_PREFIX}${token}`);
+    
+    if (!username) return null;
+    // Compatibility: If older sessions stored just "valid", we can't map to a user easily.
+    // We assume new sessions store the username.
+    // If it equals 'valid' (legacy), we might need to handle it or force relogin.
+    // For now, let's assume we store username in session value.
+
+    const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
+    if (!users) return null;
+
+    if (username === 'valid') {
+        // Fallback for legacy admin
+        return users.find(u => u.role === 'admin') || null;
+    }
+
+    return users.find(u => u.username === username) || null;
   };
 
   const checkRateLimit = async (ip: string): Promise<boolean> => {
@@ -179,7 +187,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   };
 
   const verifyTurnstile = async (token: string, ip: string) => {
-      if (!env.TURNSTILE_SECRET_KEY) return true; // Bypass if not configured
+      if (!env.TURNSTILE_SECRET_KEY) return true; 
       if (!token) return false;
 
       const formData = new FormData();
@@ -195,9 +203,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const tsOutcome: any = await tsResult.json();
         return tsOutcome.success;
       } catch (e) {
-        console.error("Turnstile error", e);
         return false;
       }
+  };
+
+  // Check if user has specific permission
+  const hasPermission = (user: User, perm: string) => {
+      if (user.role === 'admin') return true;
+      if (user.permissions?.includes('all')) return true;
+      return user.permissions?.includes(perm);
   };
 
   // --- Routes ---
@@ -211,13 +225,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }, 200, 3600);
   }
 
-  // 2. Setup Check (Does admin exist?)
+  // 2. Setup Check
   if (path === 'setup-check') {
       const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
       return jsonResponse({ isSetup: !!(users && users.length > 0) });
   }
 
-  // 3. Register (Only allowed if no users exist)
+  // 3. Register (Only for first Admin)
   if (path === 'register' && request.method === 'POST') {
       const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
       if (users && users.length > 0) {
@@ -227,7 +241,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const body: any = await request.json();
       if (!body.username || !body.password) return errorResponse("Missing fields");
 
-      // Verify Turnstile
       const ip = getIp();
       if (!await verifyTurnstile(body.turnstileToken, ip)) {
           return errorResponse('Captcha validation failed', 400);
@@ -239,7 +252,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           username: body.username,
           passwordHash: hash,
           salt: salt,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          role: 'admin',
+          permissions: ['all']
       };
 
       await env.BLOG_KV.put(USERS_KEY, JSON.stringify([newUser]));
@@ -259,40 +274,106 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return errorResponse('Captcha validation failed', 400);
     }
 
-    // Get Users from KV
     const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[];
     
-    // Check 1: KV Users exist?
     if (users && users.length > 0) {
-        // Find user by username
         const targetUser = users.find(u => u.username === body.username);
         
         if (targetUser) {
              const inputHashObj = await hashPassword(body.password || '', hex2buf(targetUser.salt));
              if (inputHashObj.hash === targetUser.passwordHash) {
                  const token = crypto.randomUUID();
-                 await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
+                 // Store username in session so we know who logged in
+                 await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, targetUser.username, { expirationTtl: 86400 });
                  await env.BLOG_KV.delete(`${LIMIT_PREFIX}${ip}`);
-                 return jsonResponse({ token });
+                 
+                 // Return user info (no sensitive data)
+                 return jsonResponse({ 
+                     token,
+                     user: {
+                         username: targetUser.username,
+                         role: targetUser.role || 'editor',
+                         permissions: targetUser.permissions || []
+                     }
+                 });
              }
         }
     } 
-    // Check 2: Fallback to LEGACY env variable if no KV users yet
-    else if (process.env.ADMIN_PASSWORD && body.password === process.env.ADMIN_PASSWORD) {
-         const token = crypto.randomUUID();
-         await env.BLOG_KV.put(`${SESSION_PREFIX}${token}`, 'valid', { expirationTtl: 86400 });
-         return jsonResponse({ token });
-    }
 
     await incrementRateLimit(ip);
     return errorResponse('Invalid credentials', 401);
   }
 
-  // 5. Posts Management
-  if (path.startsWith('posts')) {
-    const isAuthenticated = await checkAuth();
+  // 5. User Management (NEW)
+  if (path === 'users') {
+      const currentUser = await getAuthenticatedUser();
+      if (!currentUser) return errorResponse('Unauthorized', 401);
 
-    // GET List (Paginated + Filtered) or Single
+      if (!hasPermission(currentUser, 'manage_users')) {
+          return errorResponse('Permission denied', 403);
+      }
+
+      const users = await env.BLOG_KV.get(USERS_KEY, 'json') as User[] || [];
+
+      // GET Users List
+      if (request.method === 'GET') {
+          // Return list without password hashes/salts
+          const safeUsers = users.map(u => ({
+              username: u.username,
+              role: u.role || 'editor',
+              permissions: u.permissions || [],
+              createdAt: u.createdAt
+          }));
+          return jsonResponse(safeUsers);
+      }
+
+      // POST Create User
+      if (request.method === 'POST') {
+          const body: any = await request.json();
+          if (!body.username || !body.password) return errorResponse("Missing fields");
+
+          if (users.find(u => u.username === body.username)) {
+              return errorResponse("Username exists", 400);
+          }
+
+          const { hash, salt } = await hashPassword(body.password);
+          
+          const newUser: User = {
+              username: body.username,
+              passwordHash: hash,
+              salt: salt,
+              createdAt: Date.now(),
+              role: 'editor', // Sub-accounts are editors by default
+              permissions: body.permissions || [] 
+          };
+
+          users.push(newUser);
+          await env.BLOG_KV.put(USERS_KEY, JSON.stringify(users));
+          return jsonResponse({ success: true });
+      }
+
+      // DELETE User
+      if (request.method === 'DELETE') {
+          const targetUsername = url.searchParams.get('username');
+          if (!targetUsername) return errorResponse("Missing username");
+          if (targetUsername === currentUser.username) return errorResponse("Cannot delete yourself");
+
+          const targetUser = users.find(u => u.username === targetUsername);
+          if (targetUser?.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1) {
+             return errorResponse("Cannot delete the only admin");
+          }
+
+          const newUsers = users.filter(u => u.username !== targetUsername);
+          await env.BLOG_KV.put(USERS_KEY, JSON.stringify(newUsers));
+          return jsonResponse({ success: true });
+      }
+  }
+
+  // 6. Posts Management
+  if (path.startsWith('posts')) {
+    const currentUser = await getAuthenticatedUser();
+    // For GET operations (public), we don't strictly need a user, unless viewing drafts
+
     if (request.method === 'GET') {
       const id = url.searchParams.get('id');
 
@@ -302,12 +383,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         
         const fullPost: any = postData;
 
-        // Draft Protection: Only admin can see drafts
-        if (fullPost.status === 'draft' && !isAuthenticated) {
-            return errorResponse('Unauthorized: Draft', 403);
+        // Draft Protection
+        if (fullPost.status === 'draft') {
+            if (!currentUser) return errorResponse('Unauthorized: Draft', 403);
+            // Any logged in user can view drafts for now, or restrict if needed
         }
         
-        // Update views count
+        // Update views logic (omitted for brevity, same as before)
         const metaList = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
         const idx = metaList.findIndex(p => p.id === id);
         if (idx !== -1) {
@@ -315,12 +397,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
              await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(metaList));
              fullPost.views = metaList[idx].views;
              await env.BLOG_KV.put(`post:${id}`, JSON.stringify(fullPost));
-             // Don't cache views update response strictly
              return jsonResponse(fullPost, 200, 0); 
         }
         return jsonResponse(postData, 200, 60);
       } else {
-        // --- PAGINATION & FILTERING ---
+        // ... Pagination & Filtering (same as before) ...
+        // Filter: Status
         const page = parseInt(url.searchParams.get('page') || '1');
         const limit = parseInt(url.searchParams.get('limit') || '10');
         const search = (url.searchParams.get('search') || '').toLowerCase();
@@ -329,57 +411,38 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         
         let list = (await env.BLOG_KV.get(METADATA_KEY, 'json') as PostMetadata[]) || [];
         
-        // Filter: Status (Drafts visible only to admin)
-        if (!isAuthenticated) {
+        if (!currentUser) {
             list = list.filter(p => p.status !== 'draft');
         }
-
-        // Filter: Search
-        if (search) {
-            list = list.filter(p => p.title.toLowerCase().includes(search) || p.excerpt.toLowerCase().includes(search));
-        }
-
-        // Filter: Category
-        if (category) {
-            list = list.filter(p => p.category === category);
-        }
-
-        // Filter: Tag
-        if (tag) {
-            list = list.filter(p => p.tags && p.tags.includes(tag));
-        }
+        // ... filtering logic ...
+        if (search) list = list.filter(p => p.title.toLowerCase().includes(search) || p.excerpt.toLowerCase().includes(search));
+        if (category) list = list.filter(p => p.category === category);
+        if (tag) list = list.filter(p => p.tags && p.tags.includes(tag));
         
-        // Sort desc by date
         list.sort((a, b) => b.createdAt - a.createdAt);
-
         const total = list.length;
         const start = (page - 1) * limit;
         const end = start + limit;
         const pagedList = list.slice(start, end);
 
-        // Cache first page longer if no filters, others shorter
-        // If authenticated (admin is viewing), do not cache to ensure latest status is seen
-        const cacheTime = isAuthenticated ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
-
-        return jsonResponse({
-          list: pagedList,
-          total,
-          page,
-          limit
-        }, 200, cacheTime); 
+        const cacheTime = currentUser ? 0 : (page === 1 && !search && !category && !tag ? 60 : 30);
+        return jsonResponse({ list: pagedList, total, page, limit }, 200, cacheTime); 
       }
     }
 
-    // POST (Protected)
+    // POST (Protected - Write)
     if (request.method === 'POST') {
-      if (!isAuthenticated) return errorResponse('Unauthorized', 401);
+      if (!currentUser) return errorResponse('Unauthorized', 401);
+      if (!hasPermission(currentUser, 'manage_contents')) {
+          return errorResponse('Permission denied', 403);
+      }
       
       const body: any = await request.json();
       if (!body.title) return errorResponse('Missing title');
 
       if (!body.id) body.id = crypto.randomUUID();
       if (!body.createdAt) body.createdAt = Date.now();
-      if (!body.status) body.status = 'draft'; // Default to draft
+      if (!body.status) body.status = 'draft'; 
 
       await env.BLOG_KV.put(`post:${body.id}`, JSON.stringify(body));
 
@@ -402,16 +465,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         newMeta.views = list[metaIndex].views; 
         list[metaIndex] = newMeta;
       } else {
-        list.unshift(newMeta); // Add to top
+        list.unshift(newMeta); 
       }
 
       await env.BLOG_KV.put(METADATA_KEY, JSON.stringify(list));
       return jsonResponse({ id: body.id });
     }
 
-    // DELETE (Protected)
+    // DELETE (Protected - Write)
     if (request.method === 'DELETE') {
-      if (!isAuthenticated) return errorResponse('Unauthorized', 401);
+      if (!currentUser) return errorResponse('Unauthorized', 401);
+      if (!hasPermission(currentUser, 'manage_contents')) {
+          return errorResponse('Permission denied', 403);
+      }
       
       const id = url.searchParams.get('id');
       if (!id) return errorResponse('Missing ID');

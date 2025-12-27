@@ -55,6 +55,16 @@ export interface User {
   passwordHash: string;
   salt: string;
   createdAt: number;
+  role: 'admin' | 'editor';
+  permissions: string[]; // e.g. ['manage_posts', 'manage_users', 'all']
+}
+
+// For frontend storage/display (no sensitive data)
+export interface UserProfile {
+  username: string;
+  role: 'admin' | 'editor';
+  permissions: string[];
+  createdAt?: number;
 }
 
 export interface SetupStatus {
